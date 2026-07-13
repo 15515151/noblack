@@ -256,6 +256,9 @@ go test -bench=. ./internal/matcher/
 - 词库与统计文件可能包含业务数据，请合理设置文件权限、备份和保留策略。
 - 自动匹配结果适合作为规则判断或人工复核的辅助信息，不应在缺少上下文时作为唯一决策依据。
 
+## 友情链接
+[linuxdo](https://linux.do)
+
 ## License
 
 本项目采用 [GNU Affero General Public License v3.0](./LICENSE) 许可。
