@@ -1,0 +1,20 @@
+# 构建产物与本地文件, 不进构建上下文
+server.exe
+*.exe
+/out
+/data
+stats.json
+
+# 版本控制与 IDE
+.git
+.gitignore
+.idea
+.vscode
+
+# 文档 (镜像里用不到, 减小上下文)
+README.md
+API.md
+
+# 测试临时文件
+*.tmp
+*.test

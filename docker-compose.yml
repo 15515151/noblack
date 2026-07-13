@@ -1,0 +1,23 @@
+services:
+  noblack:
+    build: .
+    # 也可直接用已构建镜像: image: noblack:latest
+    container_name: noblack
+    ports:
+      - "8080:8080"
+    # 以宿主机当前用户身份运行, 使绑定挂载的目录可读写 (避免 root 写出的文件你删不掉)。
+    # 运行前先设置: export DOCKER_UID=$(id -u) DOCKER_GID=$(id -g)  (见 README)
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    volumes:
+      # 绑定挂载: 把宿主机 ./data 目录映射到容器 /data。
+      # 词库就是 ./data/words.json, 直接在宿主机编辑即可 (fsnotify 会热加载)。
+      # 首次启动若 ./data 里没有 words.json, 会用镜像内置默认词库初始化。
+      - ./data:/data
+    environment:
+      NB_ADDR: ":8080"
+      NB_WORDS: "/data/words.json"
+      NB_STATS: "/data/stats.json"   # 留空则不持久化统计
+      NB_TOKEN: ""                    # 设为非空即开启写操作鉴权
+      NB_CI: "false"                  # "true" 开启英文大小写不敏感
+      NB_WATCH: "true"
+    restart: unless-stopped
