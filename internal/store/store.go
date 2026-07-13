@@ -167,6 +167,13 @@ func (s *Store) DeleteEntry(word string) error {
 // commitLocked 重建并发布自动机, 然后落盘。调用者须持有 mu。
 // 落盘失败时回滚内存副本, 保证内存与文件一致。
 func (s *Store) commitLocked() error {
+	if err := matcher.ValidateEntries(s.entries, s.opts); err != nil {
+		if entries, e2 := matcher.LoadEntries(s.path, s.opts); e2 == nil {
+			s.entries = entries
+		}
+		return err
+	}
+
 	// 先落盘: 若失败则不改变已发布的自动机 (但内存 entries 已改, 需回滚)。
 	if err := matcher.SaveEntries(s.path, s.entries); err != nil {
 		// 从磁盘恢复内存副本, 避免内存与文件不一致。

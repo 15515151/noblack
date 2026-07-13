@@ -42,6 +42,10 @@ func main() {
 	)
 	flag.Parse()
 
+	if *statsFile != "" && *statsIvl <= 0 {
+		log.Fatalf("设置 -stats-file 时，-stats-flush-interval 必须大于 0")
+	}
+
 	// 并行度诊断: GOMAXPROCS 决定 Go 能同时用几个核。
 	log.Printf("并行度: GOMAXPROCS=%d, NumCPU=%d", runtime.GOMAXPROCS(0), runtime.NumCPU())
 
@@ -121,11 +125,9 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("优雅关闭超时: %v", err)
 	}
-	// 确定性地做最后一次落盘 (Run 内的退出刷盘是异步的, 这里再同步刷一次保证不丢)。
+	// 等待后台持久化循环完成唯一一次退出落盘。
 	if persister != nil {
-		if err := persister.Flush(); err != nil {
-			log.Printf("[stats] 关闭时落盘失败: %v", err)
-		}
+		persister.Wait()
 	}
 	log.Printf("服务已关闭")
 }

@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"crypto/subtle"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -18,6 +20,11 @@ type Handler struct {
 	metrics *stats.Collector
 	token   string // 词条写操作的鉴权令牌; 为空表示不鉴权
 }
+
+const (
+	normalRequestBodyLimit  = 3 << 20
+	maximumRequestBodyLimit = 10 << 20
+)
 
 // NewHandler 创建 Handler。token 为空时词条写操作不鉴权 (向后兼容)。
 func NewHandler(s *store.Store, m *stats.Collector, token string) *Handler {
@@ -61,28 +68,63 @@ func (h *Handler) requireAuth(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
+// withRequestBodyPolicy 统一执行 API 请求体大小策略：
+// 不超过 3 MiB 正常处理，超过 3 MiB 且不超过 10 MiB 时需要有效令牌，
+// 超过 10 MiB 时始终拒绝。
+func (h *Handler) withRequestBodyPolicy(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Body == nil || r.Body == http.NoBody {
+			next(w, r)
+			return
+		}
+
+		if r.ContentLength > maximumRequestBodyLimit {
+			writeErr(w, http.StatusRequestEntityTooLarge, "请求体超过 10 MiB 上限")
+			return
+		}
+		if r.ContentLength > normalRequestBodyLimit && (!h.authEnabled() || !h.checkAuth(r)) {
+			writeErr(w, http.StatusUnauthorized, "请求体超过 3 MiB，需要有效令牌")
+			return
+		}
+
+		body, err := io.ReadAll(io.LimitReader(r.Body, maximumRequestBodyLimit+1))
+		_ = r.Body.Close()
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "读取请求体失败")
+			return
+		}
+		if len(body) > maximumRequestBodyLimit {
+			writeErr(w, http.StatusRequestEntityTooLarge, "请求体超过 10 MiB 上限")
+			return
+		}
+		if len(body) > normalRequestBodyLimit && (!h.authEnabled() || !h.checkAuth(r)) {
+			writeErr(w, http.StatusUnauthorized, "请求体超过 3 MiB，需要有效令牌")
+			return
+		}
+
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		r.ContentLength = int64(len(body))
+		next(w, r)
+	}
+}
+
 // Register 注册所有路由。
 func (h *Handler) Register(mux *http.ServeMux) {
-	// 检测与运维
-	mux.HandleFunc("/check", h.handleCheck)
-	mux.HandleFunc("/reload", h.handleReload)
-	mux.HandleFunc("/levels", h.handleLevels)
-	mux.HandleFunc("/health", h.handleHealth)
+	handle := func(pattern string, fn http.HandlerFunc) {
+		mux.HandleFunc(pattern, h.withRequestBodyPolicy(fn))
+	}
 
-	// 词库 CRUD
-	mux.HandleFunc("/words", h.handleWords)       // GET 列表 / POST 新增
-	mux.HandleFunc("/words/", h.handleWordByID)   // PUT 更新 / DELETE 删除 (/words/{word})
-
-	// 统计
-	mux.HandleFunc("/stats", h.handleStats)
-	mux.HandleFunc("/stats/reset", h.handleStatsReset)
-
-	// 鉴权状态 (前端据此决定是否显示令牌框、校验令牌)
-	mux.HandleFunc("/auth/status", h.handleAuthStatus)
-	mux.HandleFunc("/auth/verify", h.handleAuthVerify)
-
-	// 前端页面
-	mux.HandleFunc("/", h.handleIndex)
+	handle("/check", h.handleCheck)
+	handle("/reload", h.handleReload)
+	handle("/levels", h.handleLevels)
+	handle("/health", h.handleHealth)
+	handle("/words", h.handleWords)
+	handle("/words/", h.handleWordByID)
+	handle("/stats", h.handleStats)
+	handle("/stats/reset", h.handleStatsReset)
+	handle("/auth/status", h.handleAuthStatus)
+	handle("/auth/verify", h.handleAuthVerify)
+	handle("/", h.handleIndex)
 }
 
 // ---------- 统一响应 ----------
@@ -178,6 +220,9 @@ func (h *Handler) handleReload(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusMethodNotAllowed, "仅支持 POST")
 		return
 	}
+	if !h.requireAuth(w, r) {
+		return
+	}
 	n, err := h.store.Reload()
 	if err != nil {
 		log.Printf("[reload] 失败: %v", err)
@@ -252,7 +297,7 @@ func (h *Handler) handleWords(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleWordByID(w http.ResponseWriter, r *http.Request) {
 	// 路径形如 /words/挖矿, 取 /words/ 之后的部分。
 	// r.URL.Path 已由 net/http 完成 URL 解码, 中文可直接使用。
-	word := trimPrefixPath(r.URL.Path, "/words/")
+	word := matcher.NormalizeWord(trimPrefixPath(r.URL.Path, "/words/"))
 	if word == "" {
 		writeErr(w, http.StatusBadRequest, "缺少词条, 路径应为 /words/{word}")
 		return
@@ -268,9 +313,11 @@ func (h *Handler) handleWordByID(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "请求体解析失败: "+err.Error())
 			return
 		}
-		if e.Word == "" {
-			e.Word = word // 允许 body 省略 word, 用路径里的
+		if e.Word != "" && matcher.NormalizeWord(e.Word) != word {
+			writeErr(w, http.StatusBadRequest, "请求体中的敏感词字段必须与路径中的词条一致")
+			return
 		}
+		e.Word = word
 		e = matcher.NormalizeEntry(e) // 清洗后再存, 保证响应与落盘一致
 		if err := h.store.UpdateEntry(e); err != nil {
 			writeErr(w, http.StatusNotFound, err.Error())
@@ -310,6 +357,9 @@ func (h *Handler) handleStats(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleStatsReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeErr(w, http.StatusMethodNotAllowed, "仅支持 POST")
+		return
+	}
+	if !h.requireAuth(w, r) {
 		return
 	}
 	h.metrics.Reset()

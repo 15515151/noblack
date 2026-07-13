@@ -2,7 +2,7 @@
 
 # ============ 构建阶段 ============
 # 静态编译 (CGO_ENABLED=0), 产出一个不依赖 libc 的单文件二进制。
-FROM golang:1.23-alpine AS build
+FROM golang:1.25.12-alpine AS build
 
 WORKDIR /src
 

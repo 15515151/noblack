@@ -64,7 +64,14 @@ func LoadEntries(path string, opts Options) ([]Entry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("读取词库文件失败: %w", err)
 	}
-	return parseEntries(data, opts.DefaultLevel)
+	entries, err := parseEntries(data, opts.DefaultLevel)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateEntries(entries, opts); err != nil {
+		return nil, fmt.Errorf("词库内容无效: %w", err)
+	}
+	return entries, nil
 }
 
 // parseEntries 解析 JSON 字节流为归一化词条列表。
@@ -115,11 +122,28 @@ func parseEntries(data []byte, defaultLevel string) ([]Entry, error) {
 	return entries, nil
 }
 
-// BuildFromEntries 用词条列表构建只读自动机。纯 CPU, 可在后台调用。
-//
-// 一个 Entry 的 word 字段可含逗号分隔的多个敏感词 (如 "大雷,小雷"), 它们共享同一套
-// levels/remarks。构建时按逗号拆分成独立的匹配词, 因此检测命中会精确报告是哪个词,
-// 统计也按单个词计数。
+// ValidateEntries 检查按逗号展开后的敏感词是否唯一。
+// 例如 "a,b" 和 "a" 展开后会发生重复；若不拒绝，后录入词条会静默覆盖自动机中的元数据。
+// 启用大小写不敏感时会按折叠后的词比较，因此 "A" 和 "a" 也视为重复。
+func ValidateEntries(entries []Entry, opts Options) error {
+	seen := make(map[string]string)
+	for _, e := range entries {
+		for _, word := range SplitWords(e.Word) {
+			key := word
+			if opts.CaseInsensitive {
+				key = strings.Map(func(r rune) rune { return fold(r, true) }, word)
+			}
+			if previous, ok := seen[key]; ok {
+				return fmt.Errorf("展开后的敏感词 %q 重复，分别来自词条 %q 和 %q", word, previous, e.Word)
+			}
+			seen[key] = e.Word
+		}
+	}
+	return nil
+}
+
+// BuildFromEntries 用词条列表构建只读自动机。单个词条可包含多个逗号分隔的敏感词，
+// 这些词共享相同的等级和备注。
 func BuildFromEntries(entries []Entry, opts Options) *Automaton {
 	b := NewBuilder(opts.CaseInsensitive)
 	for _, e := range entries {
@@ -163,6 +187,9 @@ func NormalizeEntry(e Entry) Entry {
 // SaveEntries 将词条列表以规范 JSON ({"words":[...]}) 写入文件。
 // 先写临时文件再原子 rename, 避免写到一半被读到半个文件。
 func SaveEntries(path string, entries []Entry) error {
+	if err := ValidateEntries(entries, Options{}); err != nil {
+		return fmt.Errorf("词库内容无效: %w", err)
+	}
 	// 归一化, 保证 levels/remarks 为非 nil 切片 (JSON 输出 [] 而非 null)。
 	out := make([]Entry, 0, len(entries))
 	for _, e := range entries {

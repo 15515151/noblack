@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -21,11 +23,14 @@ type Persister struct {
 	c        *Collector
 	path     string
 	interval time.Duration
+	flushMu  sync.Mutex
+	done     chan struct{}
+	doneOnce sync.Once
 }
 
 // NewPersister 创建持久化器。interval <= 0 时会被调用方规避 (见 Run)。
 func NewPersister(c *Collector, path string, interval time.Duration) *Persister {
-	return &Persister{c: c, path: path, interval: interval}
+	return &Persister{c: c, path: path, interval: interval, done: make(chan struct{})}
 }
 
 // LoadInto 在启动时从磁盘读取统计并恢复到 Collector。
@@ -48,15 +53,30 @@ func (p *Persister) LoadInto() error {
 
 // Flush 立即将当前统计写盘 (临时文件 + 原子 rename)。并发安全。
 func (p *Persister) Flush() error {
+	p.flushMu.Lock()
+	defer p.flushMu.Unlock()
 	data, err := json.MarshalIndent(p.c.Dump(), "", "  ")
 	if err != nil {
 		return fmt.Errorf("序列化统计失败: %w", err)
 	}
 	data = append(data, '\n')
 
-	tmp := p.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	tmpFile, err := os.CreateTemp(filepath.Dir(p.path), filepath.Base(p.path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("创建临时统计文件失败: %w", err)
+	}
+	tmp := tmpFile.Name()
+	defer os.Remove(tmp)
+	if err := tmpFile.Chmod(0o600); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("设置临时统计文件权限失败: %w", err)
+	}
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
 		return fmt.Errorf("写入临时统计文件失败: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("关闭临时统计文件失败: %w", err)
 	}
 	if err := os.Rename(tmp, p.path); err != nil {
 		return fmt.Errorf("替换统计文件失败: %w", err)
@@ -65,8 +85,16 @@ func (p *Persister) Flush() error {
 }
 
 // Run 启动后台定期落盘循环, 阻塞直到 done 关闭; 退出前会做最后一次 Flush。
+// Wait 阻塞等待后台 Run 循环退出。
+func (p *Persister) Wait() { <-p.done }
+
 // 通常放在独立 goroutine 中: go p.Run(done)。
 func (p *Persister) Run(done <-chan struct{}) {
+	defer p.doneOnce.Do(func() { close(p.done) })
+	if p.interval <= 0 {
+		log.Printf("[stats] 非法的落盘间隔: %s", p.interval)
+		return
+	}
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
 

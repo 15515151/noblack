@@ -173,8 +173,21 @@ func (b *Builder) Build() *Automaton {
 	}
 
 	// 收集并排序等级集合。
-	levels := make([]string, 0, len(b.levelSet))
-	for lv := range b.levelSet {
+	effectiveLevels := make(map[string]struct{})
+	var collectLevels func(*node)
+	collectLevels = func(n *node) {
+		if n.meta != nil {
+			for _, lv := range n.meta.Levels {
+				effectiveLevels[lv] = struct{}{}
+			}
+		}
+		for _, child := range n.children {
+			collectLevels(child)
+		}
+	}
+	collectLevels(root)
+	levels := make([]string, 0, len(effectiveLevels))
+	for lv := range effectiveLevels {
 		levels = append(levels, lv)
 	}
 	sort.Strings(levels)

@@ -5,12 +5,12 @@ import "testing"
 // buildTestAutomaton 构造覆盖多种情形的测试自动机 (多备注/多等级/自定义等级/英文词)。
 func buildTestAutomaton(ci bool) *Automaton {
 	b := NewBuilder(ci)
-	b.Add("大雷", []string{"High"}, []string{"大奶子", "大奶"})     // 多备注
+	b.Add("大雷", []string{"High"}, []string{"大奶子", "大奶"}) // 多备注
 	b.Add("废物", []string{"Medium"}, nil)
 	b.Add("笨蛋", []string{"Low"}, []string{"轻微侮辱"})
 	b.Add("雷", []string{"Low"}, nil)                          // 与 "大雷" 重叠
 	b.Add("挖矿", []string{"bilibili", "引流"}, []string{"引流站点"}) // 一词多等级
-	b.Add("pornhub", []string{"色情"}, []string{"黄色平台"})       // 英文词
+	b.Add("pornhub", []string{"色情"}, []string{"黄色平台"})        // 英文词
 	return b.Build()
 }
 
@@ -183,11 +183,11 @@ func TestSplitWords(t *testing.T) {
 
 func TestNormalizeWord(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"  ,  ,TS,  ", "TS"},                    // 用户实际发的脏数据
+		{"  ,  ,TS,  ", "TS"}, // 用户实际发的脏数据
 		{"扶她, 伪娘 ,TS,男同", "扶她,伪娘,TS,男同"}, // 去段内空白
 		{"挖矿", "挖矿"},
 		{"  挖矿  ", "挖矿"},
-		{" , , ", ""},   // 全空 -> 空串
+		{" , , ", ""}, // 全空 -> 空串
 		{"", ""},
 		{"a，，b", "a,b"}, // 中文逗号 + 空段
 	}
@@ -213,5 +213,35 @@ func TestNormalizeEntry(t *testing.T) {
 	}
 	if len(e.Remarks) != 0 {
 		t.Errorf("空白备注应被丢弃, 实际: %v", e.Remarks)
+	}
+}
+
+func TestValidateEntriesRejectsExpandedDuplicates(t *testing.T) {
+	entries := []Entry{
+		{Word: "a,b", Levels: []string{"旧等级"}},
+		{Word: "a", Levels: []string{"新等级"}},
+	}
+	if err := ValidateEntries(entries, Options{}); err == nil {
+		t.Fatal("预期返回展开词重复错误")
+	}
+}
+
+func TestValidateEntriesCaseInsensitive(t *testing.T) {
+	entries := []Entry{{Word: "A"}, {Word: "a"}}
+	if err := ValidateEntries(entries, Options{}); err != nil {
+		t.Fatalf("大小写敏感模式下词条应互不重复: %v", err)
+	}
+	if err := ValidateEntries(entries, Options{CaseInsensitive: true}); err == nil {
+		t.Fatal("大小写不敏感模式下没有拒绝重复词")
+	}
+}
+
+func TestBuilderDuplicateDoesNotLeakStaleLevels(t *testing.T) {
+	b := NewBuilder(false)
+	b.Add("a", []string{"旧等级"}, nil)
+	b.Add("a", []string{"新等级"}, nil)
+	a := b.Build()
+	if got := a.Levels(); len(got) != 1 || got[0] != "新等级" {
+		t.Fatalf("Levels() = %v，期望 [新等级]", got)
 	}
 }

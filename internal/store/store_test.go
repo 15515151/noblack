@@ -107,3 +107,13 @@ func TestUpsert(t *testing.T) {
 		}
 	}
 }
+
+func TestRejectExpandedDuplicateOnAdd(t *testing.T) {
+	s := newTempStore(t)
+	if err := s.AddEntry(matcher.Entry{Word: "挖矿,其他词", Levels: []string{"A"}}); err == nil {
+		t.Fatal("预期拒绝展开后重复的词条")
+	}
+	if got := s.ListEntries(); len(got) != 1 || got[0].Word != "挖矿" {
+		t.Fatalf("拒绝重复词条后 Store 发生了变化: %+v", got)
+	}
+}

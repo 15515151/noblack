@@ -3,6 +3,7 @@ package stats
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -64,4 +65,52 @@ func TestPersist_CorruptFile(t *testing.T) {
 	if err := p.LoadInto(); err == nil {
 		t.Error("损坏文件应返回解析错误")
 	}
+}
+
+func TestPersistConcurrentFlush(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "stats.json")
+	c := New()
+	c.RecordCheck([]string{"a"})
+	p := NewPersister(c, path, time.Hour)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := p.Flush(); err != nil {
+				t.Errorf("并发落盘失败: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	restored := New()
+	if err := NewPersister(restored, path, time.Hour).LoadInto(); err != nil {
+		t.Fatalf("并发落盘后加载失败: %v", err)
+	}
+	if got := restored.Snapshot(0).CheckRequests; got != 1 {
+		t.Fatalf("恢复后的检测请求数为 %d，期望 1", got)
+	}
+}
+
+func TestPersisterRunWaitsForFinalFlush(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "stats.json")
+	c := New()
+	c.RecordCheck([]string{"a"})
+	p := NewPersister(c, path, time.Hour)
+	done := make(chan struct{})
+	go p.Run(done)
+	close(done)
+	p.Wait()
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("退出前最终落盘未完成: %v", err)
+	}
+}
+
+func TestPersisterInvalidIntervalExits(t *testing.T) {
+	p := NewPersister(New(), filepath.Join(t.TempDir(), "stats.json"), 0)
+	done := make(chan struct{})
+	go p.Run(done)
+	p.Wait()
 }

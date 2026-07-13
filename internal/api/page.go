@@ -162,7 +162,7 @@ async function verifyToken(){
 async function doCheck(){
   const text = $('#check-text').value;
   try{
-    const d = await api('/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    const d = await api('/check',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({text})});
     renderCheck(text, d);
   }catch(e){ toast(e.message,true); }
 }
@@ -184,6 +184,7 @@ function renderCheck(text, d){
 
 // ---- 词库 ----
 let ALL_WORDS=[];
+let RENDERED_WORDS=[];
 async function loadWords(){
   checkAuth(); // 决定是否显示令牌框
   try{ const d=await api('/words'); ALL_WORDS=d.words||[]; $('#w-count').textContent=d.count; renderWords(); }
@@ -191,16 +192,24 @@ async function loadWords(){
 }
 function renderWords(){
   const f=$('#w-filter').value.trim();
-  const list = f? ALL_WORDS.filter(w=>w.word.includes(f)||w.levels.join().includes(f)) : ALL_WORDS;
-  $('#w-tbody').innerHTML = list.map(w=>'<tr>'+
+  RENDERED_WORDS = f? ALL_WORDS.filter(w=>w.word.includes(f)||w.levels.join().includes(f)) : ALL_WORDS;
+  $('#w-tbody').innerHTML = RENDERED_WORDS.map((w,i)=>'<tr>'+
     '<td><b>'+esc(w.word)+'</b></td>'+
     '<td>'+w.levels.map(l=>'<span class="tag '+lvlClass(l)+'">'+esc(l)+'</span>').join('')+'</td>'+
-    '<td>'+(w.remarks.length?w.remarks.map(r=>'<span class="tag remark">'+esc(r)+'</span>').join(''):'<span class="muted">—</span>')+'</td>'+
-    '<td><button class="ghost sm" onclick=\'editWord('+JSON.stringify(JSON.stringify(w))+')\'>改</button> '+
-    '<button class="danger sm" onclick=\'delWord('+JSON.stringify(w.word)+')\'>删</button></td></tr>').join('');
+    '<td>'+(w.remarks.length?w.remarks.map(r=>'<span class="tag remark">'+esc(r)+'</span>').join(''):'<span class="muted">&mdash;</span>')+'</td>'+
+    '<td><button class="ghost sm" data-word-action="edit" data-word-index="'+i+'">&#25913;</button> '+
+    '<button class="danger sm" data-word-action="delete" data-word-index="'+i+'">&#21024;</button></td></tr>').join('');
 }
+$('#w-tbody').addEventListener('click',e=>{
+  const btn=e.target.closest('button[data-word-action]');
+  if(!btn)return;
+  const w=RENDERED_WORDS[Number(btn.dataset.wordIndex)];
+  if(!w)return;
+  if(btn.dataset.wordAction==='edit')editWord(w);
+  else if(btn.dataset.wordAction==='delete')delWord(w.word);
+});
 let EDITING=null;
-function editWord(js){ const w=JSON.parse(js);
+function editWord(w){
   EDITING=w.word; $('#w-word').value=w.word;
   $('#w-levels').value=w.levels.join(','); $('#w-remarks').value=w.remarks.join(',');
   $('#word-form-title').textContent='✏️ 编辑词条: '+w.word; $('#w-save-btn').textContent='更新';
@@ -235,7 +244,7 @@ async function delWord(word){
   try{ await api('/words/'+encodeURIComponent(word),{method:'DELETE',headers:authHeaders()}); toast('已删除'); loadWords(); }
   catch(e){ toast(e.message,true); }
 }
-async function reload(){ try{ const d=await api('/reload',{method:'POST'}); toast('已从文件重载 '+d.word_count+' 词'); loadWords(); }catch(e){ toast(e.message,true);} }
+async function reload(){ try{ const d=await api('/reload',{method:'POST',headers:authHeaders()}); toast('已从文件重载 '+d.word_count+' 词'); loadWords(); }catch(e){ toast(e.message,true);} }
 
 // ---- 统计 ----
 async function loadStats(){
@@ -250,7 +259,7 @@ async function loadStats(){
       tb.innerHTML=d.top_words.map((w,i)=>'<tr><td>'+(i+1)+'</td><td><b>'+esc(w.word)+'</b></td><td>'+w.count+'</td></tr>').join(''); }
   }catch(e){ toast(e.message,true); }
 }
-async function resetStats(){ if(!confirm('清零所有统计?'))return; try{ await api('/stats/reset',{method:'POST'}); toast('已清零'); loadStats(); }catch(e){ toast(e.message,true);} }
+async function resetStats(){ if(!confirm('清零所有统计?'))return; try{ await api('/stats/reset',{method:'POST',headers:authHeaders()}); toast('已清零'); loadStats(); }catch(e){ toast(e.message,true);} }
 
 function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 // 初始化

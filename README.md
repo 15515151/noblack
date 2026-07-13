@@ -262,3 +262,10 @@ go test -bench=. ./internal/matcher/
 ## License
 
 本项目采用 [GNU Affero General Public License v3.0](./LICENSE) 许可。
+
+## 请求体大小与管理接口鉴权
+
+- 请求体不超过 3 MiB 时正常处理。
+- 请求体超过 3 MiB 且不超过 10 MiB 时，服务端必须已配置令牌，并且请求需要携带该有效令牌。
+- 请求体超过 10 MiB 时返回 HTTP 413，携带令牌也不会放行。
+- 启用令牌鉴权后，`POST /reload` 和 `POST /stats/reset` 与词库增删改接口使用相同的令牌鉴权。

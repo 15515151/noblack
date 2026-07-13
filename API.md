@@ -587,3 +587,13 @@ curl http://localhost:8080/health
 | `/reload` | `{ word_count: int }` |
 | `/levels` | `{ levels: string[], count: int }` |
 | `/health` | `{ word_count: int, levels: string[] }` |
+
+## 请求体大小策略
+
+所有接口均按实际接收到的请求体字节数执行以下限制，分块传输请求也不例外：
+
+- 不超过 3 MiB：正常处理。
+- 超过 3 MiB 且不超过 10 MiB：服务端必须已配置令牌，请求还必须携带有效的 `X-Auth-Token` 或 Bearer 令牌；否则返回 HTTP 401。
+- 超过 10 MiB：始终返回 HTTP 413，携带令牌也不会放行。
+
+启用令牌鉴权后，`POST /reload` 和 `POST /stats/reset` 属于受保护的管理操作。
