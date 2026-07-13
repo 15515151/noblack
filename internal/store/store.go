@@ -11,6 +11,7 @@ package store
 // 关键点: 热加载/编辑期间, 旧自动机始终对读请求可用; 新树构建完毕的瞬间才被“发布”。
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -18,6 +19,9 @@ import (
 
 	"noblack/internal/matcher"
 )
+
+// ErrEntryNotFound 表示目标词条不存在。
+var ErrEntryNotFound = errors.New("词条不存在")
 
 // Store 保存自动机原子引用 + 词条内存副本。
 type Store struct {
@@ -120,7 +124,7 @@ func (s *Store) UpdateEntry(e matcher.Entry) error {
 
 	idx := s.findLocked(e.Word)
 	if idx < 0 {
-		return fmt.Errorf("词条 %q 不存在", e.Word)
+		return fmt.Errorf("%w: %q", ErrEntryNotFound, e.Word)
 	}
 	s.entries[idx] = e
 	return s.commitLocked()
@@ -158,7 +162,7 @@ func (s *Store) DeleteEntry(word string) error {
 
 	idx := s.findLocked(word)
 	if idx < 0 {
-		return fmt.Errorf("词条 %q 不存在", word)
+		return fmt.Errorf("%w: %q", ErrEntryNotFound, word)
 	}
 	s.entries = append(s.entries[:idx], s.entries[idx+1:]...)
 	return s.commitLocked()

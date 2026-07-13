@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -185,5 +186,32 @@ func TestIndexDoesNotEmbedWordsInInlineHandlers(t *testing.T) {
 	}
 	if !strings.Contains(body, `data-word-action="edit"`) || !strings.Contains(body, `addEventListener('click'`) {
 		t.Fatalf("未找到安全的事件委托实现")
+	}
+}
+
+func TestWordWriteFailureReturns500(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/words.json"
+	entries := []matcher.Entry{{Word: "挖矿", Levels: []string{"L"}}}
+	if err := matcher.SaveEntries(path, entries); err != nil {
+		t.Fatal(err)
+	}
+	// 把词库路径替换为目录，使临时文件创建或重命名必然失败，用于模拟持久化错误。
+	badPath := dir + "/不可写目标"
+	if err := os.Mkdir(badPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := NewHandler(store.New(badPath, entries, matcher.Options{}), stats.New(), "s3cret")
+	rec := do(h, http.MethodPut, "/words/%E6%8C%96%E7%9F%BF", `{"levels":["B"]}`, map[string]string{"X-Auth-Token": "s3cret"})
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("词库落盘失败时实际状态码 %d，期望 500: %s", rec.Code, rec.Body)
+	}
+}
+
+func TestMissingWordStillReturns404(t *testing.T) {
+	h := newTestHandler(t, "s3cret")
+	rec := do(h, http.MethodPut, "/words/%E4%B8%8D%E5%AD%98%E5%9C%A8", `{"levels":["B"]}`, map[string]string{"X-Auth-Token": "s3cret"})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("更新不存在词条时实际状态码 %d，期望 404: %s", rec.Code, rec.Body)
 	}
 }

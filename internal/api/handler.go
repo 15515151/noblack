@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -320,7 +321,11 @@ func (h *Handler) handleWordByID(w http.ResponseWriter, r *http.Request) {
 		e.Word = word
 		e = matcher.NormalizeEntry(e) // 清洗后再存, 保证响应与落盘一致
 		if err := h.store.UpdateEntry(e); err != nil {
-			writeErr(w, http.StatusNotFound, err.Error())
+			if errors.Is(err, store.ErrEntryNotFound) {
+				writeErr(w, http.StatusNotFound, err.Error())
+			} else {
+				writeErr(w, http.StatusInternalServerError, err.Error())
+			}
 			return
 		}
 		log.Printf("[words] 更新词条: %s", e.Word)
@@ -330,7 +335,11 @@ func (h *Handler) handleWordByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := h.store.DeleteEntry(word); err != nil {
-			writeErr(w, http.StatusNotFound, err.Error())
+			if errors.Is(err, store.ErrEntryNotFound) {
+				writeErr(w, http.StatusNotFound, err.Error())
+			} else {
+				writeErr(w, http.StatusInternalServerError, err.Error())
+			}
 			return
 		}
 		log.Printf("[words] 删除词条: %s", word)

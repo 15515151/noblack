@@ -59,10 +59,6 @@ go run ./cmd/server -watch=false
 ### Docker Compose
 
 ```bash
-# Linux / macOS：让容器以当前用户身份写入绑定目录
-export DOCKER_UID=$(id -u)
-export DOCKER_GID=$(id -g)
-
 docker compose up -d --build
 ```
 
@@ -71,7 +67,14 @@ docker compose up -d --build
 - `./data/words.json`：词库文件
 - `./data/stats.json`：统计数据
 
-首次启动且 `./data/words.json` 不存在时，容器会自动复制一份默认词库。
+容器和服务进程均以 root 身份运行，避免宿主机绑定挂载目录的 UID/GID 与容器用户不一致，导致无法创建临时文件、更新词库或持久化统计。
+
+首次启动且 `./data/words.json` 不存在时，容器会自动复制一份默认词库。更新配置后需要重新构建并创建容器：
+
+```bash
+docker compose down
+docker compose up -d --build --force-recreate
+```
 
 ### Docker
 
@@ -82,19 +85,7 @@ mkdir -p ./data
 docker run -d \
   --name noblack \
   -p 8080:8080 \
-  --user "$(id -u):$(id -g)" \
   -v "$(pwd)/data:/data" \
-  noblack:latest
-```
-
-如只需要读取本地词库，可使用只读挂载并关闭统计持久化：
-
-```bash
-docker run -d \
-  --name noblack \
-  -p 8080:8080 \
-  -v "$(pwd)/words.json:/data/words.json:ro" \
-  -e NB_STATS="" \
   noblack:latest
 ```
 

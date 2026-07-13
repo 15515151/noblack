@@ -20,8 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/noblack
 FROM alpine:3.20
 
 # 时区数据 (可选, 便于日志时间正确); ca-certificates 备将来外连用。
-RUN apk add --no-cache tzdata ca-certificates \
-    && adduser -D -u 10001 noblack
+RUN apk add --no-cache tzdata ca-certificates
 
 WORKDIR /app
 
@@ -30,12 +29,10 @@ COPY --from=build /out/noblack /app/noblack
 COPY words.json /app/words.default.json
 COPY docker-entrypoint.sh /app/entrypoint.sh
 
-# /data 为持久化目录 (词库 + 统计), 赋予运行用户写权限。
+# /data 为持久化目录（词库 + 统计）；容器以 root 运行，避免绑定挂载权限不一致。
 RUN chmod +x /app/entrypoint.sh \
-    && mkdir -p /data \
-    && chown -R noblack:noblack /app /data
+    && mkdir -p /data
 
-USER noblack
 
 # 通过环境变量配置, 入口脚本会翻译成命令行参数。
 ENV NB_ADDR=":8080" \
@@ -44,6 +41,9 @@ ENV NB_ADDR=":8080" \
     NB_TOKEN="" \
     NB_CI="false" \
     NB_WATCH="true"
+
+# 显式使用 root，确保绑定挂载的持久化目录可写。
+USER root
 
 EXPOSE 8080
 VOLUME ["/data"]
