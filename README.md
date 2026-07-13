@@ -1,243 +1,261 @@
-# noblack · 高性能敏感词检测服务
+# noblack
 
-基于 **Aho-Corasick 自动机** 的 Go 敏感词检测后端，支持敏感度分级、备注返回，以及**无锁原子热加载**。
+一个使用 Go 编写的轻量级文本关键词匹配服务。项目基于 Aho-Corasick 自动机，提供关键词扫描、分类标签、备注信息、在线词库管理、运行统计与热更新能力，并内置了可直接使用的 Web 控制台。
 
-## 特性
+适合用于内容分类、文本标注、规则路由、合规提示、客服质检等需要按词库快速识别文本片段的场景。
 
-- **多模式匹配**：Aho-Corasick 自动机，匹配复杂度 `O(n + z)`，与词库规模**无关**。
-- **按 rune 构建**：中文、**英文**（bilibili）、emoji 一视同仁，位置下标精确。
-- **动态多等级**：等级是**任意字符串**且**一个词可挂多个等级**（如 `挖矿 → ["bilibili","引流"]`），不再硬编码 `High/Medium/Low`。热加载后经 `GET /levels` 自动感知全部等级。
-- **多备注**：`大雷 → ["大奶子","大奶"]`（中英文逗号均可）。
-- **一条录入多词**：`"word":"大雷,小雷"` 用逗号分隔，共享同一套等级/备注，检测时各词独立命中、独立计数。
-- **在线词库管理**：`GET/POST/PUT/DELETE /words` 增删改查，改动即时生效并写回 `words.json`。**写操作可选令牌鉴权**（`-token`），读操作与检测始终开放。
-- **访问统计**：请求数、命中数、**触发最多的敏感词**排行，全程无锁采集（`atomic`+`sync.Map`），对吞吐无实质影响。可选**持久化**（`-stats-file`），后台定期落盘、重启自动恢复。
-- **内嵌前端控制台**：访问 `GET /`（`http://localhost:8080`）即可打开检测测试、词库管理、统计看板三合一页面，零外部依赖。
-- **JSON 词库**：单一 JSON 文件维护，见 [词库格式](#词库格式)。
-- **大小写不敏感**（可选 `-ci`）：`Bilibili`/`BILIBILI` 均命中词条 `bilibili`。
-- **无锁热加载**：`atomic.Value` 存自动机指针，后台构建新树 + 原子替换，**读请求永不阻塞**。
-- **两种热加载触发**：`fsnotify` 文件监听（自动）+ `POST /reload`（手动）。
+## 功能概览
 
-> 📖 完整接口说明（每个请求怎么发、响应体逐字段解释、错误码）见 **[API.md](./API.md)**。
+- **高效匹配**：使用 Aho-Corasick 自动机一次扫描多个关键词。
+- **Unicode 支持**：按 `rune` 处理文本，支持中文、英文、Emoji 等内容，并返回准确的字符区间。
+- **灵活元数据**：每个词条可配置多个分类标签与多条备注。
+- **批量词条**：一个配置项可通过中英文逗号声明多个关键词，共享同一组标签和备注。
+- **在线管理**：通过 Web 控制台或 HTTP API 查询、新增、修改和删除词条。
+- **动态更新**：支持监听词库文件自动重载，也可通过 API 手动触发重载。
+- **并发友好**：新自动机在后台构建完成后通过 `atomic.Value` 发布，查询路径无需等待重建过程。
+- **运行统计**：记录请求量、匹配量和高频命中项，可选定期持久化。
+- **访问控制**：可为词库写操作配置访问令牌。
+- **便于部署**：支持本地运行、Docker 和 Docker Compose，无需单独部署前端。
 
-## 目录结构
+完整接口定义及响应字段说明请参阅 [API.md](./API.md)。
 
-```
-noblack/
-├── go.mod / go.sum
-├── words.json                      # 词库 (JSON)
-├── API.md                          # 完整 API 文档
-├── Dockerfile                      # 多阶段构建 (静态编译 + alpine)
-├── docker-entrypoint.sh            # 容器入口: 初始化数据卷 + 环境变量转参数
-├── docker-compose.yml
-├── .dockerignore
-├── cmd/
-│   └── server/
-│       └── main.go                 # 服务入口: 装配 + 启动 + 优雅关闭
-└── internal/
-    ├── matcher/
-    │   ├── automaton.go            # AC 自动机: 节点定义 / 构建 / 匹配 / 等级发现
-    │   ├── loader.go               # JSON 词条: 加载 / 构建 / 保存
-    │   └── automaton_test.go       # 单元测试 + 基准测试
-    ├── stats/
-    │   ├── stats.go                # 无锁统计采集 (atomic + sync.Map)
-    │   ├── persist.go              # 统计持久化: 定期落盘 + 启动恢复 (方案 A)
-    │   └── stats_test.go / persist_test.go
-    ├── store/
-    │   ├── store.go                # atomic.Value 热替换 + 词条 CRUD
-    │   ├── store_test.go
-    │   └── watcher.go              # fsnotify 文件监听 (去抖)
-    └── api/
-        ├── handler.go              # HTTP Handler: 检测 / CRUD / 统计 / 运维
-        ├── helpers.go
-        └── page.go                 # 内嵌前端控制台 (单页 HTML)
-```
+## 快速开始
 
-## 词库格式
+### 本地运行
 
-服务使用单一 JSON 词库（默认 `./words.json`）：
-
-```json
-{
-  "words": [
-    { "word": "大雷",      "levels": ["High"],            "remarks": ["大奶子", "大奶"] },
-    { "word": "大雷,小雷", "levels": ["High"],            "remarks": ["女性胸部"] },
-    { "word": "挖矿",      "levels": ["bilibili", "引流"], "remarks": ["引流站点"] },
-    { "word": "六合彩",    "levels": ["赌博", "诈骗"],      "remarks": ["非法博彩", "菠菜"] },
-    { "word": "pornhub",   "level": "色情",               "remarks": "黄色平台,成人网站" }
-  ]
-}
-```
-
-- **`word`**：敏感词；**可用逗号（中/英文）分隔多个词**（`"大雷,小雷"`），共享同一套等级/备注，检测时各词独立命中、独立计数。
-- **`levels`**（推荐）：字符串数组，**一个词可属于多个等级**，如 `["bilibili","引流"]`。
-- **`level`**（兼容）：单等级字符串，也可写逗号串 `"a,b"`；与 `levels` 同时存在时以 `levels` 优先。
-- **`remarks`**：数组 `["a","b"]` 或逗号串 `"a,b"` 皆可；缺省为 `[]`。
-- `level`/`levels` 都缺省时用 `-default-level`（默认 `Low`）。
-- 顶层也支持直接是数组 `[ {...}, {...} ]`（省略 `words` 包裹）。逗号支持中文 `，` 与英文 `,`。
-
-## 运行
+环境要求：Go 1.21 或更高版本。
 
 ```bash
-# 拉取依赖 (fsnotify)
-go mod tidy
+go mod download
+go run ./cmd/server
+```
 
-# 启动 (默认 :8080, 词库 ./words.json)
-go run ./cmd/server -words ./words.json -addr :8080
+服务默认监听 `:8080`，词库默认读取当前目录下的 `words.json`。
 
-# 英文词大小写不敏感
-go run ./cmd/server -words ./words.json -ci
+启动后可访问：
 
-# 开启统计持久化 (重启不丢, 每 30s 落盘)
+- Web 控制台：`http://localhost:8080`
+- 健康检查：`http://localhost:8080/health`
+
+常用启动方式：
+
+```bash
+# 指定监听地址和词库文件
+go run ./cmd/server -addr :8080 -words ./words.json
+
+# 启用英文大小写忽略匹配
+go run ./cmd/server -ci
+
+# 持久化运行统计
 go run ./cmd/server -stats-file ./stats.json
 
-# 开启写操作鉴权 (增/改/删词条需令牌)
+# 为词库写操作启用访问令牌
 go run ./cmd/server -token "your-secret-token"
 
-# 关闭文件监听 (仅用 /reload 手动热加载)
+# 关闭文件监听，仅通过 API 手动重载
 go run ./cmd/server -watch=false
 ```
 
-启动参数：
-
-| 参数 | 默认 | 说明 |
-|------|------|------|
-| `-words` | `./words.json` | JSON 词库路径 |
-| `-addr` | `:8080` | HTTP 监听地址 |
-| `-watch` | `true` | 是否启用 fsnotify 自动热加载 |
-| `-ci` | `false` | 匹配大小写不敏感（主要影响英文词） |
-| `-default-level` | `Low` | 词条未标注 `level`/`levels` 时的默认等级 |
-| `-stats-file` | `""`（不持久化） | 统计持久化文件路径；留空则重启后统计归零 |
-| `-stats-flush-interval` | `30s` | 统计后台落盘间隔（仅 `-stats-file` 非空时生效） |
-| `-token` | `""`（不鉴权） | 词条写操作（增/改/删）的鉴权令牌；留空则全部开放 |
-
-## 测试
+### Docker Compose
 
 ```bash
-# 单元测试
-go test ./...
+# Linux / macOS：让容器以当前用户身份写入绑定目录
+export DOCKER_UID=$(id -u)
+export DOCKER_GID=$(id -g)
 
-# 基准测试 (匹配吞吐)
-go test -bench=. ./internal/matcher/
+docker compose up -d --build
 ```
 
-## Docker 部署
+默认配置会将宿主机的 `./data` 挂载到容器 `/data`：
 
-镜像为多阶段构建：静态编译（`CGO_ENABLED=0`）后放进 alpine，最终镜像约 20MB（其中二进制约 6MB，前端已内嵌进二进制，无需额外静态资源）。
+- `./data/words.json`：词库文件
+- `./data/stats.json`：统计数据
 
-### 用本地目录存放 words.json（推荐）
+首次启动且 `./data/words.json` 不存在时，容器会自动复制一份默认词库。
 
-把宿主机的一个目录绑定挂载到容器 `/data`，词库就是 `./data/words.json`，你可以**直接用编辑器改这个文件**，fsnotify 会自动热加载。为让容器能写这个目录（增删改词条、落盘统计都要写），用 `--user` 让容器以你自己的身份运行：
+### Docker
 
 ```bash
-# 构建
 docker build -t noblack:latest .
 
-# 运行: 词库/统计放在宿主机 ./data 目录, 容器以当前用户身份运行
 mkdir -p ./data
-docker run -d --name noblack -p 8080:8080 \
+docker run -d \
+  --name noblack \
+  -p 8080:8080 \
   --user "$(id -u):$(id -g)" \
   -v "$(pwd)/data:/data" \
   noblack:latest
-
-# 打开 http://localhost:8080 即为控制台
 ```
 
-- 词库文件就是 `./data/words.json`，直接编辑即时生效。
-- 首次启动时若 `./data` 里没有 `words.json`，会用镜像内置的默认词库初始化。
-- 统计落在 `./data/stats.json`，重启不丢。
-
-> `--user "$(id -u):$(id -g)"` 让容器进程用你的 UID/GID，因此它写出的文件归你所有、你能直接编辑和删除，也不会有权限报错。（Windows/WSL 下 `id -u` 通常返回 1000，一般也可直接用。）
-
-### 用 docker compose
+如只需要读取本地词库，可使用只读挂载并关闭统计持久化：
 
 ```bash
-export DOCKER_UID=$(id -u) DOCKER_GID=$(id -g)   # 让 compose 以你的身份运行容器
-docker compose up -d
-```
-
-compose 已配置绑定挂载 `./data:/data` 与 `user: "${DOCKER_UID}:${DOCKER_GID}"`，词库同样在 `./data/words.json`。
-
-### 只挂单个 words.json 文件（只读场景）
-
-如果你只想让容器读一个本地词库文件、不需要在网页里改：
-
-```bash
-docker run -d --name noblack -p 8080:8080 \
+docker run -d \
+  --name noblack \
+  -p 8080:8080 \
   -v "$(pwd)/words.json:/data/words.json:ro" \
   -e NB_STATS="" \
   noblack:latest
 ```
 
-此时网页上的增删改会失败（文件只读），只能改本地 `words.json` 靠热加载生效；`NB_STATS=""` 关闭统计持久化（否则会因无处写盘而报错）。
+## 词库格式
 
-### 环境变量配置
+默认词库采用 JSON 格式：
 
-入口脚本会把下列环境变量翻译成启动参数：
-
-| 环境变量 | 默认 | 对应参数 | 说明 |
-|----------|------|----------|------|
-| `NB_ADDR` | `:8080` | `-addr` | 监听地址 |
-| `NB_WORDS` | `/data/words.json` | `-words` | 词库路径 |
-| `NB_STATS` | `/data/stats.json` | `-stats-file` | 统计持久化文件；置空则不持久化 |
-| `NB_TOKEN` | `""` | `-token` | 写操作鉴权令牌；置空则不鉴权 |
-| `NB_CI` | `false` | `-ci` | `true` 开启英文大小写不敏感 |
-| `NB_WATCH` | `true` | `-watch` | 是否启用文件监听热加载 |
-
-```bash
-# 例: 开启鉴权 + 大小写不敏感
-docker run -d --name noblack -p 8080:8080 \
-  --user "$(id -u):$(id -g)" -v "$(pwd)/data:/data" \
-  -e NB_TOKEN=your-secret -e NB_CI=true noblack:latest
+```json
+{
+  "words": [
+    {
+      "word": "售后服务",
+      "levels": ["customer-service"],
+      "remarks": ["转交售后流程"]
+    },
+    {
+      "word": "退款,退货",
+      "levels": ["after-sales", "priority"],
+      "remarks": ["需要人工复核"]
+    },
+    {
+      "word": "Example",
+      "level": "demo",
+      "remarks": "英文示例"
+    }
+  ]
+}
 ```
 
-> `docker stop` 发送 SIGTERM，容器内进程会优雅关闭并**落盘最后一次统计**（Linux 下 SIGTERM 可正常捕获）。
+字段说明：
 
-## API
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `word` | string | 待匹配的关键词；可用中文或英文逗号分隔多个词 |
+| `levels` | string[] | 推荐写法，一个词条可配置多个分类标签 |
+| `level` | string | 兼容单标签写法；与 `levels` 同时存在时优先使用 `levels` |
+| `remarks` | string[] / string | 备注列表，也可写成逗号分隔的字符串 |
 
-打开浏览器访问 **`http://localhost:8080`** 即可使用内嵌控制台（检测 / 词库管理 / 统计）。
+补充规则：
 
-接口分四组：
+- 未提供 `level` 或 `levels` 时，使用 `-default-level` 指定的默认值。
+- 顶层既可以使用 `{ "words": [...] }`，也可以直接使用数组 `[...]`。
+- 逗号分隔的多个关键词会分别参与匹配和统计，但共享标签与备注。
+- 保存词库时会清理空白项，并以规范 JSON 格式写回文件。
 
-- **检测**：`POST /check`
-- **词库管理**：`GET /words`、`POST /words`、`PUT /words/{word}`、`DELETE /words/{word}`
-- **统计**：`GET /stats`、`POST /stats/reset`
-- **运维**：`POST /reload`、`GET /levels`、`GET /health`
+## HTTP API
 
-快速上手：
+主要接口如下：
+
+| 分类 | 方法与路径 | 说明 |
+|------|------------|------|
+| 文本匹配 | `POST /check` | 扫描文本并返回命中位置及元数据 |
+| 词库管理 | `GET /words` | 获取词条列表 |
+| 词库管理 | `POST /words` | 新增词条 |
+| 词库管理 | `PUT /words/{word}` | 修改词条 |
+| 词库管理 | `DELETE /words/{word}` | 删除词条 |
+| 配置查询 | `GET /levels` | 获取当前词库中的全部标签 |
+| 动态更新 | `POST /reload` | 从文件重新加载词库 |
+| 运行统计 | `GET /stats` | 获取统计信息 |
+| 运行统计 | `POST /stats/reset` | 重置统计信息 |
+| 鉴权 | `GET /auth/status` | 查询是否启用写操作鉴权 |
+| 鉴权 | `POST /auth/verify` | 校验访问令牌 |
+| 运维 | `GET /health` | 健康检查 |
+
+示例：
 
 ```bash
-# 检测
+# 扫描文本
 curl -X POST http://localhost:8080/check \
-  -H 'Content-Type: application/json' -d '{"text":"有人在挖矿"}'
+  -H 'Content-Type: application/json' \
+  -d '{"text":"我需要申请退款并联系售后服务"}'
 
 # 新增词条
 curl -X POST http://localhost:8080/words \
   -H 'Content-Type: application/json' \
-  -d '{"word":"六合彩","levels":["赌博","诈骗"],"remarks":["非法博彩"]}'
+  -H 'X-Auth-Token: your-secret-token' \
+  -d '{"word":"物流查询","levels":["customer-service"],"remarks":["转交物流流程"]}'
 
-# 查看统计 (触发最多的词等)
+# 查看统计
 curl "http://localhost:8080/stats?top=10"
 ```
 
-> 📖 **每个接口的请求方式、请求体、响应体逐字段说明、错误码——完整文档见 [API.md](./API.md)。**
+写操作令牌同时支持以下两种请求头：
 
-## 热加载并发安全说明
-
-```
-读请求 (POST /check)                    热加载 (fsnotify / POST /reload)
-      │                                          │
-  store.Current()  ← atomic.Load             LoadFromFile()  ← 后台构建全新树
-      │  (无锁, 拿到旧树/新树之一)                  │  (纯 CPU, 不触碰旧树)
-  auto.FindAll()                             atomic.Store(fresh) ← 原子发布
+```text
+X-Auth-Token: your-secret-token
+Authorization: Bearer your-secret-token
 ```
 
-- 读路径只有一次 `atomic.Load`，**无锁、无阻塞**。
-- 新树在后台完整构建完成后，才通过一次 `atomic.Store` “发布”。
-- 旧树在最后一个引用它的请求结束后由 GC 回收，切换瞬间无缝。
-- `reloadMu` 仅串行化“重建”动作本身，**不参与读路径**，因此绝不会阻塞 `/check`。
+更多请求、响应和错误码示例见 [API.md](./API.md)。
 
-## 性能
+## 配置项
 
-单机基准下 `FindAll` 单次调用为微秒级，轻松满足 10,000 req/min（~166 QPS）的要求，实际可达数万 QPS。自动机为只读结构，可被任意数量 goroutine 并发读取。
+### 命令行参数
 
-**统计的开销**：按接口计数用 `atomic.Int64`（~1–5 ns），按词计数用 `sync.Map` + 原子值（~10–30 ns）。相比一次匹配 ~2500 ns，统计占比 **< 0.1%**，读路径依旧无锁。排序取「触发最多的词」只发生在查看 `/stats` 那一下，不在检测热路径上。
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `-addr` | `:8080` | HTTP 监听地址 |
+| `-words` | `./words.json` | 词库文件路径 |
+| `-watch` | `true` | 是否监听词库文件并自动重载 |
+| `-ci` | `false` | 是否忽略英文大小写 |
+| `-default-level` | `Low` | 词条未配置标签时使用的默认值 |
+| `-stats-file` | 空 | 统计持久化文件；为空时不持久化 |
+| `-stats-flush-interval` | `30s` | 统计数据定期写入文件的间隔 |
+| `-token` | 空 | 词库写操作令牌；为空时不启用鉴权 |
+
+### Docker 环境变量
+
+| 环境变量 | 默认值 | 对应参数 | 说明 |
+|----------|--------|----------|------|
+| `NB_ADDR` | `:8080` | `-addr` | HTTP 监听地址 |
+| `NB_WORDS` | `/data/words.json` | `-words` | 词库文件路径 |
+| `NB_STATS` | `/data/stats.json` | `-stats-file` | 统计持久化文件；置空可关闭 |
+| `NB_TOKEN` | 空 | `-token` | 词库写操作令牌 |
+| `NB_CI` | `false` | `-ci` | 是否忽略英文大小写 |
+| `NB_WATCH` | `true` | `-watch` | 是否启用文件监听 |
+
+## 热更新机制
+
+词库更新不会直接修改正在提供查询的自动机：
+
+1. 从 JSON 文件或在线管理接口读取最新词条。
+2. 在后台完整构建新的 Aho-Corasick 自动机。
+3. 构建成功后，通过 `atomic.Value` 一次性替换当前实例。
+4. 已开始的请求继续使用原实例，后续请求使用新实例。
+
+文件监听使用 `fsnotify`，也可以调用 `POST /reload` 主动触发更新。重建操作会串行执行，但不会占用查询路径上的锁。
+
+## 项目结构
+
+```text
+noblack/
+├── cmd/server/          # 服务入口
+├── internal/api/        # HTTP 接口与内嵌控制台
+├── internal/matcher/    # 自动机、词库解析与匹配逻辑
+├── internal/stats/      # 运行统计与持久化
+├── internal/store/      # 词库管理、热替换与文件监听
+├── API.md               # 完整接口文档
+├── words.json           # 默认词库
+├── Dockerfile
+└── docker-compose.yml
+```
+
+## 测试
+
+```bash
+# 运行全部测试
+go test ./...
+
+# 运行匹配模块基准测试
+go test -bench=. ./internal/matcher/
+```
+
+实际吞吐会受文本长度、命中数量、词库内容、硬件环境和并发模型影响。建议使用与生产场景接近的数据运行基准测试，再据此设置实例数量和资源限制。
+
+## 使用建议
+
+- 生产环境建议配置 `-token`，并在反向代理层限制管理接口的访问范围。
+- 词库与统计文件可能包含业务数据，请合理设置文件权限、备份和保留策略。
+- 自动匹配结果适合作为规则判断或人工复核的辅助信息，不应在缺少上下文时作为唯一决策依据。
+
+## License
+
+本项目采用 [GNU Affero General Public License v3.0](./LICENSE) 许可。
