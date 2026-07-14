@@ -599,15 +599,84 @@ curl http://localhost:8080/health
 启用令牌鉴权后，`POST /reload` 和 `POST /stats/reset` 属于受保护的管理操作。
 
 
-## AI ???????
+## AI 双模型响应字段
 
-`POST /check` ??????????????? CPU ???????
+启用本地模型服务后，`POST /check` 会在原有词库匹配字段之外，返回 Lite 与 MacBERT 两个纯 CPU 模型的独立检测结果。两个模型常驻内存，并在每次请求中并行推理。
 
-- `model_results`: Lite ? MacBERT ???????
-- `combined_action`: ????????? `pass/review/block`?
-- `model_device`: ??? `cpu`?
-- `models_parallel`: ?????? `true`?
-- `model_latency_ms`: ?????????????
-- `model_error`: ??????????????
+### 新增字段
 
-?? `model_results` ???? `model`?`sexual_harm_probability`?`action`?`semantic_gate`?`rule_hits`?????????
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `data.model_results` | array | 两个模型的独立结果。正常情况下依次包含 `lite` 和 `macbert`。 |
+| `data.combined_action` | string | 综合建议，取两个模型中更严格的动作：`block > review > pass`。 |
+| `data.model_device` | string | 模型运行设备；当前纯 CPU 部署固定为 `cpu`。 |
+| `data.models_parallel` | bool | 两个模型是否并行推理；正常部署时为 `true`。 |
+| `data.model_latency_ms` | number | 两个模型并行推理的总耗时，单位为毫秒。 |
+| `data.model_error` | string | 模型服务不可用时的降级提示。出现该字段时，词库匹配结果仍然有效。 |
+
+每个 `data.model_results[]` 元素包含：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `model` | string | 模型名称：`lite` 或 `macbert`。 |
+| `id` | string | 输入文本的脱敏哈希标识，不回显原文。 |
+| `sexual_harm_probability` | number | 色情或性暗示风险分数，范围为 `0`～`1`。 |
+| `action` | string | 模型独立建议：`pass`、`review` 或 `block`。 |
+| `semantic_gate` | number | 模型对字符语义分支的平均门控权重。 |
+| `rule_hits` | string[] | 命中的高精度补充规则；无命中时为空数组。 |
+| `pass_threshold` | number | 低于该阈值时动作是 `pass`。 |
+| `block_threshold` | number | 大于等于该阈值时动作是 `block`。两个阈值之间为 `review`。 |
+| `latency_ms` | number | 该模型的独立推理耗时，单位为毫秒。 |
+
+### 双模型响应示例
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "has_sensitive_word": false,
+    "matches": [],
+    "model_device": "cpu",
+    "models_parallel": true,
+    "combined_action": "block",
+    "model_latency_ms": 18.42,
+    "model_results": [
+      {
+        "model": "lite",
+        "id": "45ae67c3509964bc",
+        "sexual_harm_probability": 0.1612,
+        "action": "review",
+        "semantic_gate": 0.5418,
+        "rule_hits": [],
+        "pass_threshold": 0.15,
+        "block_threshold": 0.5,
+        "latency_ms": 4.12
+      },
+      {
+        "model": "macbert",
+        "id": "45ae67c3509964bc",
+        "sexual_harm_probability": 0.7638,
+        "action": "block",
+        "semantic_gate": 0.5583,
+        "rule_hits": [],
+        "pass_threshold": 0.15,
+        "block_threshold": 0.5,
+        "latency_ms": 17.95
+      }
+    ]
+  }
+}
+```
+
+### 降级行为
+
+如果模型服务暂时不可用，`POST /check` 仍返回 HTTP 200 和正常的词库匹配结果，同时增加：
+
+```json
+{
+  "model_error": "model service unavailable"
+}
+```
+
+一体化启动脚本和 Docker 入口会等待 Lite 与 MacBERT 都加载完成后再启动 Web 服务，因此正常部署中不应频繁出现降级字段。
