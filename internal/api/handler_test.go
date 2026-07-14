@@ -209,6 +209,24 @@ func TestIndexDoesNotEmbedWordsInInlineHandlers(t *testing.T) {
 	}
 }
 
+func TestIndexMergeFlowDoesNotDeleteStaleEditingPath(t *testing.T) {
+	h := newTestHandler(t, "")
+	rec := do(h, http.MethodGet, "/", "", nil)
+	body := rec.Body.String()
+	if !strings.Contains(body, `const saved=await api('/words'`) || !strings.Contains(body, `if(saved.merged)`) {
+		t.Fatalf("前端未根据 merged 响应分支处理")
+	}
+	mergedStart := strings.Index(body, `if(saved.merged)`)
+	elseStart := strings.Index(body[mergedStart:], `}else{`)
+	if mergedStart < 0 || elseStart < 0 {
+		t.Fatalf("未找到 merged/else 分支")
+	}
+	mergedBranch := body[mergedStart : mergedStart+elseStart]
+	if strings.Contains(mergedBranch, `method:'DELETE'`) {
+		t.Fatalf("merged 分支仍会 DELETE 已被替换的旧词条")
+	}
+}
+
 func TestWordWriteFailureReturns500(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/words.json"

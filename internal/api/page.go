@@ -266,10 +266,16 @@ async function saveWord(){
       // 敏感词没变, 只改等级/备注 -> 直接更新
       await api('/words/'+encodeURIComponent(EDITING),{method:'PUT',headers:jsonHdr,body:JSON.stringify(body)}); toast('已更新');
     } else {
-      // 敏感词变了 = 重命名: 先建新词条, 成功后再删旧的 (先建后删, 失败时旧词条完好)
-      await api('/words',{method:'POST',headers:jsonHdr,body:JSON.stringify(body)});
-      await api('/words/'+encodeURIComponent(EDITING),{method:'DELETE',headers:authHeaders()});
-      toast('已更新 (敏感词已变更)');
+      // 词列表发生变化：POST 可能创建新词条，也可能由后端直接合并并替换旧批量词条。
+      const saved=await api('/words',{method:'POST',headers:jsonHdr,body:JSON.stringify(body)});
+      if(saved.merged){
+        // merged 表示旧批量词条已经被后端原子替换，不能再 DELETE 旧的 EDITING 路径。
+        toast('已合并，新增 '+(saved.added_words||[]).length+' 个词');
+      }else{
+        // 没有重叠时 POST 创建了独立新词条，再删除旧词条以完成重命名。
+        await api('/words/'+encodeURIComponent(EDITING),{method:'DELETE',headers:authHeaders()});
+        toast('已更新 (敏感词已变更)');
+      }
     }
     resetWordForm(); loadWords();
   }catch(e){ toast(e.message,true); }
