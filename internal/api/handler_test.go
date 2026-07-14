@@ -79,6 +79,24 @@ func TestAuth_ReadsAlwaysOpen(t *testing.T) {
 	}
 }
 
+func TestCheckRejectsMissingEmptyAndWhitespaceText(t *testing.T) {
+	h := newTestHandler(t, "")
+	cases := []string{
+		`{}`,
+		`{"text":""}`,
+		`{"text":"   \t\n"}`,
+	}
+	for _, body := range cases {
+		rec := do(h, http.MethodPost, "/check", body, nil)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("body=%s actual status=%d, expected 400: %s", body, rec.Code, rec.Body)
+		}
+		if !strings.Contains(rec.Body.String(), `"code":400`) || !strings.Contains(rec.Body.String(), "text 不能为空") {
+			t.Errorf("body=%s unexpected response: %s", body, rec.Body)
+		}
+	}
+}
+
 func TestAuth_DisabledWhenNoToken(t *testing.T) {
 	h := newTestHandler(t, "") // 未设令牌 = 不鉴权
 	if rec := do(h, "POST", "/words", `{"word":"y","levels":["A"]}`, nil); rec.Code != 200 {

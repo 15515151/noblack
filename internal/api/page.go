@@ -214,7 +214,7 @@ function renderCheck(text, d){
   }
   box.innerHTML=modelHTML+keywordHTML;
   const modelCount=(d.model_results||[]).length;
-  $('#check-hint').textContent='AI '+modelCount+' \u4e2a\u6a21\u578b ? \u8bcd\u5e93\u547d\u4e2d '+(d.matches||[]).length+' \u5904';
+  $('#check-hint').textContent='AI '+modelCount+' \u4e2a\u6a21\u578b \u00b7 \u8bcd\u5e93\u547d\u4e2d '+(d.matches||[]).length+' \u5904';
 }
 
 // ---- 词库 ----

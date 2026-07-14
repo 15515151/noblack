@@ -196,6 +196,11 @@ func (h *Handler) handleCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 无锁获取当前自动机并匹配。
+	if strings.TrimSpace(req.Text) == "" {
+		writeErr(w, http.StatusBadRequest, "text 不能为空或仅包含空白字符")
+		return
+	}
+
 	type modelOutcome struct {
 		prediction *modelclient.Prediction
 		err        error
