@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -22,6 +23,15 @@ import (
 
 // ErrEntryNotFound 表示目标词条不存在。
 var ErrEntryNotFound = errors.New("词条不存在")
+
+// AddMergeResult describes the final entry after a POST-style add/merge.
+type AddMergeResult struct {
+	Entry       matcher.Entry
+	Created     bool
+	Merged      bool
+	AddedWords  []string
+	ReusedWords []string
+}
 
 // Store 保存自动机原子引用 + 词条内存副本。
 type Store struct {
@@ -110,6 +120,137 @@ func (s *Store) AddEntry(e matcher.Entry) error {
 	}
 	s.entries = append(s.entries, e)
 	return s.commitLocked()
+}
+
+// AddOrMergeEntry adds an entry, or safely expands an existing batch entry
+// when overlapping words use identical metadata. This supports requests such as
+// existing "a,b" followed by POST "a,b,c" without allowing metadata overrides.
+func (s *Store) AddOrMergeEntry(e matcher.Entry) (AddMergeResult, error) {
+	e = matcher.NormalizeEntry(e)
+	if e.Word == "" {
+		return AddMergeResult{}, fmt.Errorf("word cannot be empty")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	requestedWords := matcher.SplitWords(e.Word)
+	requestedKeys := make(map[string]struct{}, len(requestedWords))
+	for _, word := range requestedWords {
+		requestedKeys[s.wordKey(word)] = struct{}{}
+	}
+
+	overlappedEntries := make(map[int]struct{})
+	existingWords := make(map[string]string)
+	for index, existing := range s.entries {
+		for _, word := range matcher.SplitWords(existing.Word) {
+			key := s.wordKey(word)
+			existingWords[key] = word
+			if _, ok := requestedKeys[key]; ok {
+				overlappedEntries[index] = struct{}{}
+			}
+		}
+	}
+
+	if len(overlappedEntries) == 0 {
+		before := cloneEntries(s.entries)
+		s.entries = append(s.entries, e)
+		if err := s.commitLocked(); err != nil {
+			s.entries = before
+			return AddMergeResult{}, err
+		}
+		return AddMergeResult{Entry: e, Created: true, AddedWords: requestedWords, ReusedWords: []string{}}, nil
+	}
+
+	for index := range overlappedEntries {
+		existing := s.entries[index]
+		if !sameStrings(existing.Levels, e.Levels) || !sameStrings(existing.Remarks, e.Remarks) {
+			return AddMergeResult{}, fmt.Errorf(
+				"word overlaps existing entry %q but levels/remarks differ; use PUT to update the original entry",
+				existing.Word,
+			)
+		}
+	}
+
+	combined := make([]string, 0, len(requestedWords)+8)
+	seen := make(map[string]struct{})
+	appendUnique := func(word string) {
+		key := s.wordKey(word)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		combined = append(combined, word)
+	}
+	for index, existing := range s.entries {
+		if _, ok := overlappedEntries[index]; !ok {
+			continue
+		}
+		for _, word := range matcher.SplitWords(existing.Word) {
+			appendUnique(word)
+		}
+	}
+	added := make([]string, 0)
+	reused := make([]string, 0)
+	for _, word := range requestedWords {
+		key := s.wordKey(word)
+		if _, ok := existingWords[key]; ok {
+			reused = append(reused, word)
+		} else {
+			added = append(added, word)
+		}
+		appendUnique(word)
+	}
+
+	mergedEntry := matcher.NormalizeEntry(matcher.Entry{
+		Word:    strings.Join(combined, ","),
+		Levels:  e.Levels,
+		Remarks: e.Remarks,
+	})
+	next := make([]matcher.Entry, 0, len(s.entries)-len(overlappedEntries)+1)
+	inserted := false
+	for index, existing := range s.entries {
+		if _, ok := overlappedEntries[index]; ok {
+			if !inserted {
+				next = append(next, mergedEntry)
+				inserted = true
+			}
+			continue
+		}
+		next = append(next, existing)
+	}
+	before := cloneEntries(s.entries)
+	s.entries = next
+	if err := s.commitLocked(); err != nil {
+		s.entries = before
+		return AddMergeResult{}, err
+	}
+	return AddMergeResult{Entry: mergedEntry, Merged: true, AddedWords: added, ReusedWords: reused}, nil
+}
+
+func (s *Store) wordKey(word string) string {
+	if !s.opts.CaseInsensitive {
+		return word
+	}
+	return strings.ToLower(word)
+}
+
+func cloneEntries(entries []matcher.Entry) []matcher.Entry {
+	out := make([]matcher.Entry, len(entries))
+	copy(out, entries)
+	return out
+}
+
+func sameStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 // UpdateEntry 更新一个已存在词条的等级与备注。词不存在返回错误。

@@ -329,13 +329,25 @@ func (h *Handler) handleWords(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "请求体解析失败: "+err.Error())
 			return
 		}
-		e = matcher.NormalizeEntry(e) // 清洗后再存, 保证响应与落盘一致
-		if err := h.store.AddEntry(e); err != nil {
+		e = matcher.NormalizeEntry(e) // normalize before persistence
+		result, err := h.store.AddOrMergeEntry(e)
+		if err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		log.Printf("[words] 新增词条: %s", e.Word)
-		writeJSON(w, http.StatusOK, apiResponse{Code: 200, Message: "created", Data: e})
+		message := "created"
+		if result.Merged {
+			message = "merged"
+		}
+		log.Printf("[words] %s entry: %s", message, result.Entry.Word)
+		writeJSON(w, http.StatusOK, apiResponse{
+			Code: 200, Message: message,
+			Data: map[string]interface{}{
+				"word": result.Entry.Word, "levels": result.Entry.Levels, "remarks": result.Entry.Remarks,
+				"created": result.Created, "merged": result.Merged,
+				"added_words": result.AddedWords, "reused_words": result.ReusedWords,
+			},
+		})
 	default:
 		writeErr(w, http.StatusMethodNotAllowed, "仅支持 GET / POST")
 	}

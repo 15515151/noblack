@@ -257,34 +257,69 @@ curl http://localhost:8080/words
 | `data.words[].levels` | string[] | 等级列表。 |
 | `data.words[].remarks` | string[] | 备注列表。 |
 
-### 2.2 POST /words — 新增词条
+### 2.2 POST /words — 新增或合并词条
 
 **请求体**
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `word` | string | 是 | 敏感词。**可用逗号（中/英文）分隔多个词**，如 `"大雷,小雷"`，它们共享同一套 `levels`/`remarks`；检测时各词独立命中、独立计数。 |
-| `levels` | string[] | 否 | 等级列表；缺省用默认等级（`-default-level`）。 |
+| `word` | string | 是 | 敏感词。可用中英文逗号分隔多个词，它们共享同一套 `levels`/`remarks`。 |
+| `levels` | string[] | 否 | 等级列表；缺省用默认等级。 |
 | `remarks` | string[] | 否 | 备注列表。 |
 
-```bash
-curl -X POST http://localhost:8080/words \
-  -H 'Content-Type: application/json' \
-  -d '{"word":"六合彩","levels":["赌博","诈骗"],"remarks":["非法博彩","菠菜"]}'
+**重叠词的合并规则**
 
-# 一条录入多个词 (共享等级与备注)
-curl -X POST http://localhost:8080/words \
-  -H 'Content-Type: application/json' \
-  -d '{"word":"大雷,小雷","levels":["High"],"remarks":["女性胸部"]}'
+- 请求中的词与已有批量词条部分重叠，并且 `levels`、`remarks` 完全相同时，服务端自动去重并合并新词。
+- 所有请求词都已存在且元数据相同时，按幂等合并处理，不会重复写入。
+- 重叠词的 `levels` 或 `remarks` 不同时返回 HTTP 400，避免隐式覆盖已有元数据；此时使用 `PUT /words/{word}` 明确更新原词条。
+
+例如已有：
+
+```json
+{"word":"你妈,他妈,你老冯","levels":["Medium"],"remarks":["辱骂"]}
 ```
 
-**成功（HTTP 200）**
+再次提交：
+
+```json
+{"word":"你妈,他妈,你老冯,妈了个逼","levels":["Medium"],"remarks":["辱骂"]}
+```
+
+会合并为 `你妈,他妈,你老冯,妈了个逼`。
+
+**新增成功（HTTP 200）**
 
 ```json
 {
   "code": 200,
   "message": "created",
-  "data": { "word": "六合彩", "levels": ["赌博", "诈骗"], "remarks": ["非法博彩", "菠菜"] }
+  "data": {
+    "word": "六合彩",
+    "levels": ["赌博", "诈骗"],
+    "remarks": ["非法博彩", "菠菜"],
+    "created": true,
+    "merged": false,
+    "added_words": ["六合彩"],
+    "reused_words": []
+  }
+}
+```
+
+**合并成功（HTTP 200）**
+
+```json
+{
+  "code": 200,
+  "message": "merged",
+  "data": {
+    "word": "你妈,他妈,你老冯,妈了个逼",
+    "levels": ["Medium"],
+    "remarks": ["辱骂"],
+    "created": false,
+    "merged": true,
+    "added_words": ["妈了个逼"],
+    "reused_words": ["你妈", "他妈", "你老冯"]
+  }
 }
 ```
 
@@ -293,10 +328,9 @@ curl -X POST http://localhost:8080/words \
 | 场景 | HTTP | 响应体 |
 |------|------|--------|
 | `word` 为空 | 400 | `{"code":400,"message":"word 不能为空"}` |
-| 词条已存在 | 400 | `{"code":400,"message":"词条 \"六合彩\" 已存在"}`（改用 PUT 更新） |
+| 重叠词元数据冲突 | 400 | 重叠词的 `levels` 或 `remarks` 与已有词条不同；使用 PUT 明确更新。 |
 | 请求体非法 JSON | 400 | `{"code":400,"message":"请求体解析失败: ..."}` |
 | 落盘失败 | 400 | `{"code":400,"message":"写入临时词库文件失败: ..."}` |
-
 ### 2.3 PUT /words/{word} — 更新词条
 
 `{word}` 是路径参数（URL 编码；中文需 `encodeURIComponent`）。请求体同 POST；`word` 字段可省略，缺省时用路径里的词。整条覆盖（`levels`/`remarks` 以请求体为准）。

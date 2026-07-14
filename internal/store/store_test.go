@@ -117,3 +117,73 @@ func TestRejectExpandedDuplicateOnAdd(t *testing.T) {
 		t.Fatalf("拒绝重复词条后 Store 发生了变化: %+v", got)
 	}
 }
+
+func TestAddOrMergeEntryExpandsCompatibleBatch(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "words.json")
+	entries := []matcher.Entry{{Word: "mother-a,mother-b,mother-c", Levels: []string{"Medium"}, Remarks: []string{"abuse"}}}
+	if err := matcher.SaveEntries(path, entries); err != nil {
+		t.Fatal(err)
+	}
+	s := New(path, entries, matcher.Options{})
+	result, err := s.AddOrMergeEntry(matcher.Entry{
+		Word: "mother-a,mother-b,mother-c,mother-d", Levels: []string{"Medium"}, Remarks: []string{"abuse"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Merged || result.Created {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if len(result.AddedWords) != 1 || result.AddedWords[0] != "mother-d" || len(result.ReusedWords) != 3 {
+		t.Fatalf("unexpected word changes: %+v", result)
+	}
+	list := s.ListEntries()
+	if len(list) != 1 || list[0].Word != "mother-a,mother-b,mother-c,mother-d" {
+		t.Fatalf("unexpected merged entries: %+v", list)
+	}
+	loaded, err := matcher.LoadEntries(path, matcher.Options{})
+	if err != nil || len(loaded) != 1 || loaded[0].Word != list[0].Word {
+		t.Fatalf("merged entry not persisted: entries=%+v err=%v", loaded, err)
+	}
+	if matches := s.Current().FindAll("prefix mother-d suffix"); len(matches) != 1 || matches[0].Word != "mother-d" {
+		t.Fatalf("new word is not active: %+v", matches)
+	}
+}
+
+func TestAddOrMergeEntryRejectsMetadataConflict(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "words.json")
+	entries := []matcher.Entry{{Word: "existing", Levels: []string{"A"}, Remarks: []string{"old"}}}
+	if err := matcher.SaveEntries(path, entries); err != nil {
+		t.Fatal(err)
+	}
+	s := New(path, entries, matcher.Options{})
+	_, err := s.AddOrMergeEntry(matcher.Entry{Word: "existing,new-word", Levels: []string{"Other"}})
+	if err == nil {
+		t.Fatal("expected metadata conflict")
+	}
+	if got := s.ListEntries(); len(got) != 1 || got[0].Word != "existing" {
+		t.Fatalf("store changed after conflict: %+v", got)
+	}
+}
+
+func TestAddOrMergeEntryIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "words.json")
+	entries := []matcher.Entry{{Word: "existing", Levels: []string{"A"}, Remarks: []string{"old"}}}
+	if err := matcher.SaveEntries(path, entries); err != nil {
+		t.Fatal(err)
+	}
+	s := New(path, entries, matcher.Options{})
+	result, err := s.AddOrMergeEntry(matcher.Entry{Word: "existing", Levels: []string{"A"}, Remarks: []string{"old"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Merged || len(result.AddedWords) != 0 || len(result.ReusedWords) != 1 {
+		t.Fatalf("unexpected idempotent result: %+v", result)
+	}
+	if got := s.ListEntries(); len(got) != 1 {
+		t.Fatalf("idempotent merge duplicated entries: %+v", got)
+	}
+}

@@ -256,3 +256,40 @@ func TestCheckIncludesBothModelResults(t *testing.T) {
 		}
 	}
 }
+
+func TestWordsPostMergesCompatibleOverlappingBatch(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/words.json"
+	entries := []matcher.Entry{{Word: "mother-a,mother-b,mother-c", Levels: []string{"Medium"}, Remarks: []string{"abuse"}}}
+	if err := matcher.SaveEntries(path, entries); err != nil {
+		t.Fatal(err)
+	}
+	h := NewHandler(store.New(path, entries, matcher.Options{}), stats.New(), "token")
+	rec := do(h, http.MethodPost, "/words", `{"word":"mother-a,mother-b,mother-c,mother-d","levels":["Medium"],"remarks":["abuse"]}`, map[string]string{"X-Auth-Token": "token"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body)
+	}
+	body := rec.Body.String()
+	for _, expected := range []string{`"message":"merged"`, `"word":"mother-a,mother-b,mother-c,mother-d"`, `"added_words":["mother-d"]`, `"reused_words":["mother-a","mother-b","mother-c"]`} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("missing %s in %s", expected, body)
+		}
+	}
+}
+
+func TestWordsPostRejectsOverlappingMetadataConflict(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/words.json"
+	entries := []matcher.Entry{{Word: "existing", Levels: []string{"A"}, Remarks: []string{"old"}}}
+	if err := matcher.SaveEntries(path, entries); err != nil {
+		t.Fatal(err)
+	}
+	h := NewHandler(store.New(path, entries, matcher.Options{}), stats.New(), "token")
+	rec := do(h, http.MethodPost, "/words", `{"word":"existing,new-word","levels":["Other"]}`, map[string]string{"X-Auth-Token": "token"})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), "levels/remarks differ") {
+		t.Fatalf("unexpected conflict response: %s", rec.Body)
+	}
+}
