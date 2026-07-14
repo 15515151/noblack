@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"noblack/internal/matcher"
+	"noblack/internal/modelclient"
 	"noblack/internal/stats"
 	"noblack/internal/store"
 )
@@ -20,6 +22,7 @@ type Handler struct {
 	store   *store.Store
 	metrics *stats.Collector
 	token   string // 词条写操作的鉴权令牌; 为空表示不鉴权
+	models  *modelclient.Client
 }
 
 const (
@@ -30,6 +33,11 @@ const (
 // NewHandler 创建 Handler。token 为空时词条写操作不鉴权 (向后兼容)。
 func NewHandler(s *store.Store, m *stats.Collector, token string) *Handler {
 	return &Handler{store: s, metrics: m, token: token}
+}
+
+// SetModelClient enables dual-model inference for /check.
+func (h *Handler) SetModelClient(client *modelclient.Client) {
+	h.models = client
 }
 
 // ---------- 鉴权 ----------
@@ -165,8 +173,14 @@ type matchItem struct {
 }
 
 type checkData struct {
-	HasSensitiveWord bool        `json:"has_sensitive_word"`
-	Matches          []matchItem `json:"matches"`
+	HasSensitiveWord bool                      `json:"has_sensitive_word"`
+	Matches          []matchItem               `json:"matches"`
+	ModelResults     []modelclient.ModelResult `json:"model_results,omitempty"`
+	CombinedAction   string                    `json:"combined_action,omitempty"`
+	ModelDevice      string                    `json:"model_device,omitempty"`
+	ModelsParallel   bool                      `json:"models_parallel,omitempty"`
+	ModelLatencyMS   float64                   `json:"model_latency_ms,omitempty"`
+	ModelError       string                    `json:"model_error,omitempty"`
 }
 
 func (h *Handler) handleCheck(w http.ResponseWriter, r *http.Request) {
@@ -182,6 +196,20 @@ func (h *Handler) handleCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 无锁获取当前自动机并匹配。
+	type modelOutcome struct {
+		prediction *modelclient.Prediction
+		err        error
+	}
+	var modelCh chan modelOutcome
+	if h.models != nil {
+		modelCh = make(chan modelOutcome, 1)
+		modelContext := context.WithoutCancel(r.Context())
+		go func() {
+			prediction, err := h.models.Check(modelContext, req.Text)
+			modelCh <- modelOutcome{prediction: prediction, err: err}
+		}()
+	}
+
 	rawMatches := h.store.Current().FindAll(req.Text)
 
 	items := make([]matchItem, 0, len(rawMatches))
@@ -207,10 +235,25 @@ func (h *Handler) handleCheck(w http.ResponseWriter, r *http.Request) {
 	// 记录统计 (原子操作, ~纳秒级, 不影响吞吐)。
 	h.metrics.RecordCheck(hitWords)
 
+	data := checkData{HasSensitiveWord: len(items) > 0, Matches: items}
+	if modelCh != nil {
+		outcome := <-modelCh
+		if outcome.err != nil {
+			log.Printf("[models] inference failed: %v", outcome.err)
+			data.ModelError = "model service unavailable"
+		} else {
+			data.ModelResults = outcome.prediction.Models
+			data.CombinedAction = outcome.prediction.CombinedAction
+			data.ModelDevice = outcome.prediction.Device
+			data.ModelsParallel = outcome.prediction.Parallel
+			data.ModelLatencyMS = outcome.prediction.LatencyMilliseconds
+		}
+	}
+
 	writeJSON(w, http.StatusOK, apiResponse{
 		Code:    200,
 		Message: "success",
-		Data:    checkData{HasSensitiveWord: len(items) > 0, Matches: items},
+		Data:    data,
 	})
 }
 

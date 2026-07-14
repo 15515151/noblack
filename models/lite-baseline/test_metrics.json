@@ -1,0 +1,64 @@
+{
+  "checkpoint_dir": "E:\\反重力\\开源项目\\noblack\\artifacts\\models\\lite-baseline",
+  "data_path": "E:\\反重力\\开源项目\\noblack\\data\\processed\\sexharmset\\test.jsonl",
+  "rows": 944,
+  "metrics_at_0_5": {
+    "tp": 439,
+    "fp": 15,
+    "tn": 468,
+    "fn": 22,
+    "threshold": 0.5,
+    "accuracy": 0.9608050847457628,
+    "precision": 0.9669603524229075,
+    "recall": 0.9522776572668112,
+    "specificity": 0.968944099378882,
+    "f1": 0.9595628415300546,
+    "balanced_accuracy": 0.9606108783228466
+  },
+  "metrics_at_block_threshold": {
+    "tp": 451,
+    "fp": 43,
+    "tn": 440,
+    "fn": 10,
+    "threshold": 0.065,
+    "accuracy": 0.9438559322033898,
+    "precision": 0.9129554655870445,
+    "recall": 0.9783080260303688,
+    "specificity": 0.9109730848861284,
+    "f1": 0.9445026178010472,
+    "balanced_accuracy": 0.9446405554582487
+  },
+  "average_precision": 0.9927284266148672,
+  "diagnostics": {
+    "mean_semantic_gate": 0.5609434620808746
+  },
+  "threshold_policy": {
+    "pass_threshold": 0.0325,
+    "block_threshold": 0.065,
+    "target_block_precision": 0.9,
+    "target_pass_recall": 0.98
+  },
+  "policy_metrics": {
+    "actions": {
+      "pass": 439,
+      "review": 11,
+      "block": 494
+    },
+    "unsafe_actions": {
+      "pass": 8,
+      "review": 2,
+      "block": 451
+    },
+    "safe_actions": {
+      "pass": 431,
+      "review": 9,
+      "block": 43
+    },
+    "pass_coverage": 0.4650423728813559,
+    "review_coverage": 0.011652542372881356,
+    "block_coverage": 0.5233050847457628,
+    "unsafe_auto_pass_rate": 0.01735357917570499,
+    "safe_auto_block_rate": 0.08902691511387163
+  },
+  "raw_text_in_report": false
+}

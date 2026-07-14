@@ -260,3 +260,17 @@ go test -bench=. ./internal/matcher/
 - 请求体超过 3 MiB 且不超过 10 MiB 时，服务端必须已配置令牌，并且请求需要携带该有效令牌。
 - 请求体超过 10 MiB 时返回 HTTP 413，携带令牌也不会放行。
 - 启用令牌鉴权后，`POST /reload` 和 `POST /stats/reset` 与词库增删改接口使用相同的令牌鉴权。
+
+## AI 双模型（纯 CPU）
+
+项目已内置 Lite 与 MacBERT 两个模型。部署时两个模型同时常驻内存，每次检测并行执行，并在 Web 页面同时显示结果。
+
+```powershell
+# Windows
+.\scripts\start-all.ps1
+
+# Docker
+ docker compose up -d --build
+```
+
+打开 `http://127.0.0.1:8080`。详细说明见 [DEPLOY_MODELS.md](./DEPLOY_MODELS.md)。

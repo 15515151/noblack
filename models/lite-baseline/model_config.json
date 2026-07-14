@@ -1,0 +1,39 @@
+{
+  "model": {
+    "encoder_type": "lite",
+    "model_name": "hfl/chinese-macbert-base",
+    "char_vocab_size": 2281,
+    "pinyin_vocab_size": 1046,
+    "char_embedding_dim": 192,
+    "semantic_hidden_dim": 256,
+    "pinyin_embedding_dim": 96,
+    "pinyin_hidden_dim": 192,
+    "fusion_dim": 256,
+    "dropout": 0.2,
+    "num_labels": 2
+  },
+  "training": {
+    "processed_dir": "E:\\反重力\\开源项目\\noblack\\data\\processed",
+    "output_dir": "E:\\反重力\\开源项目\\noblack\\artifacts\\models\\lite-baseline",
+    "encoder_type": "lite",
+    "model_name": "hfl/chinese-macbert-base",
+    "include_augmented": true,
+    "max_length": 128,
+    "batch_size": 64,
+    "epochs": 3,
+    "learning_rate": 0.0002,
+    "encoder_learning_rate": 2e-05,
+    "weight_decay": 0.01,
+    "auxiliary_weight": 0.1,
+    "consistency_weight": 0.2,
+    "representation_weight": 0.1,
+    "gradient_clip": 1.0,
+    "gradient_accumulation": 1,
+    "seed": 20260714,
+    "amp": true,
+    "limit_train": null,
+    "limit_dev": null,
+    "target_block_precision": 0.9,
+    "target_pass_recall": 0.98
+  }
+}

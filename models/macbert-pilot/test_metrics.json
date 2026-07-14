@@ -1,0 +1,96 @@
+{
+  "checkpoint_dir": "E:\\反重力\\开源项目\\noblack\\artifacts\\models\\macbert-pilot",
+  "data_path": "E:\\反重力\\开源项目\\noblack\\data\\processed\\sexharmset\\test.jsonl",
+  "rows": 944,
+  "metrics_at_0_5": {
+    "tp": 450,
+    "fp": 13,
+    "tn": 470,
+    "fn": 11,
+    "threshold": 0.5,
+    "accuracy": 0.9745762711864406,
+    "precision": 0.9719222462203023,
+    "recall": 0.9761388286334056,
+    "specificity": 0.9730848861283644,
+    "f1": 0.974025974025974,
+    "balanced_accuracy": 0.9746118573808851
+  },
+  "metrics_at_block_threshold": {
+    "tp": 460,
+    "fp": 66,
+    "tn": 417,
+    "fn": 1,
+    "threshold": 0.039673,
+    "accuracy": 0.9290254237288136,
+    "precision": 0.8745247148288974,
+    "recall": 0.9978308026030369,
+    "specificity": 0.8633540372670807,
+    "f1": 0.9321175278622087,
+    "balanced_accuracy": 0.9305924199350588
+  },
+  "average_precision": 0.9975652527447841,
+  "diagnostics": {
+    "mean_semantic_gate": 0.5577636896553686
+  },
+  "threshold_policy": {
+    "pass_threshold": 0.0198365,
+    "block_threshold": 0.039673,
+    "target_block_precision": 0.9,
+    "target_pass_recall": 0.98
+  },
+  "policy_metrics": {
+    "actions": {
+      "pass": 331,
+      "review": 87,
+      "block": 526
+    },
+    "unsafe_actions": {
+      "pass": 0,
+      "review": 1,
+      "block": 460
+    },
+    "safe_actions": {
+      "pass": 331,
+      "review": 86,
+      "block": 66
+    },
+    "pass_coverage": 0.350635593220339,
+    "review_coverage": 0.09216101694915255,
+    "block_coverage": 0.5572033898305084,
+    "unsafe_auto_pass_rate": 0.0,
+    "safe_auto_block_rate": 0.13664596273291926
+  },
+  "metrics_by_evasion_type": {
+    "none": {
+      "rows": 944,
+      "metrics_at_0_5": {
+        "tp": 450,
+        "fp": 13,
+        "tn": 470,
+        "fn": 11,
+        "threshold": 0.5,
+        "accuracy": 0.9745762711864406,
+        "precision": 0.9719222462203023,
+        "recall": 0.9761388286334056,
+        "specificity": 0.9730848861283644,
+        "f1": 0.974025974025974,
+        "balanced_accuracy": 0.9746118573808851
+      },
+      "metrics_at_block_threshold": {
+        "tp": 460,
+        "fp": 66,
+        "tn": 417,
+        "fn": 1,
+        "threshold": 0.039673,
+        "accuracy": 0.9290254237288136,
+        "precision": 0.8745247148288974,
+        "recall": 0.9978308026030369,
+        "specificity": 0.8633540372670807,
+        "f1": 0.9321175278622087,
+        "balanced_accuracy": 0.9305924199350588
+      },
+      "average_precision": 0.9975652527447841
+    }
+  },
+  "raw_text_in_report": false
+}

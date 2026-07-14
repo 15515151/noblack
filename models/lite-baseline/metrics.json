@@ -1,0 +1,145 @@
+{
+  "best_epoch": 3,
+  "best_f1_at_0_5": 0.9616580310880828,
+  "history": [
+    {
+      "epoch": 1,
+      "losses": {
+        "classification": 0.18707886597296167,
+        "auxiliary": 0.28917255929333674,
+        "consistency": 0.020481158798259548,
+        "representation": 0.23356118651847133,
+        "total": 0.24344847285428683
+      },
+      "dev": {
+        "tp": 454,
+        "fp": 20,
+        "tn": 459,
+        "fn": 21,
+        "threshold": 0.5,
+        "accuracy": 0.9570230607966457,
+        "precision": 0.9578059071729957,
+        "recall": 0.9557894736842105,
+        "specificity": 0.9582463465553236,
+        "f1": 0.9567966280295047,
+        "balanced_accuracy": 0.9570179101197671,
+        "average_precision": 0.9916412091995893,
+        "mean_semantic_gate": 0.5506128075237794
+      },
+      "learning_rates": [
+        0.0001499999999999999
+      ]
+    },
+    {
+      "epoch": 2,
+      "losses": {
+        "classification": 0.035990620192595836,
+        "auxiliary": 0.11374375529945158,
+        "consistency": 0.012722212364861546,
+        "representation": 0.232888648278328,
+        "total": 0.07319830371449218
+      },
+      "dev": {
+        "tp": 461,
+        "fp": 25,
+        "tn": 454,
+        "fn": 14,
+        "threshold": 0.5,
+        "accuracy": 0.9591194968553459,
+        "precision": 0.948559670781893,
+        "recall": 0.9705263157894737,
+        "specificity": 0.9478079331941545,
+        "f1": 0.9594172736732569,
+        "balanced_accuracy": 0.9591671244918141,
+        "average_precision": 0.9934962635972724,
+        "mean_semantic_gate": 0.560172690785406
+      },
+      "learning_rates": [
+        5.000000000000009e-05
+      ]
+    },
+    {
+      "epoch": 3,
+      "losses": {
+        "classification": 0.01097187961504579,
+        "auxiliary": 0.07821971684385205,
+        "consistency": 0.005478659466001273,
+        "representation": 0.2303081484080402,
+        "total": 0.04292039859909808
+      },
+      "dev": {
+        "tp": 464,
+        "fp": 26,
+        "tn": 453,
+        "fn": 11,
+        "threshold": 0.5,
+        "accuracy": 0.9612159329140462,
+        "precision": 0.9469387755102041,
+        "recall": 0.9768421052631578,
+        "specificity": 0.9457202505219207,
+        "f1": 0.9616580310880828,
+        "balanced_accuracy": 0.9612811778925392,
+        "average_precision": 0.9937940817294456,
+        "mean_semantic_gate": 0.561509062409151
+      },
+      "learning_rates": [
+        0.0
+      ]
+    }
+  ],
+  "calibrated_dev_metrics": {
+    "tp": 470,
+    "fp": 49,
+    "tn": 430,
+    "fn": 5,
+    "threshold": 0.065,
+    "accuracy": 0.9433962264150944,
+    "precision": 0.905587668593449,
+    "recall": 0.9894736842105263,
+    "specificity": 0.8977035490605428,
+    "f1": 0.9456740442655935,
+    "balanced_accuracy": 0.9435886166355345,
+    "average_precision": 0.9937940817294456,
+    "mean_semantic_gate": 0.561509062409151
+  },
+  "threshold_policy": {
+    "pass_threshold": 0.0325,
+    "block_threshold": 0.065,
+    "target_block_precision": 0.9,
+    "target_pass_recall": 0.98
+  },
+  "policy_metrics": {
+    "actions": {
+      "pass": 427,
+      "review": 8,
+      "block": 519
+    },
+    "unsafe_actions": {
+      "pass": 5,
+      "review": 0,
+      "block": 470
+    },
+    "safe_actions": {
+      "pass": 422,
+      "review": 8,
+      "block": 49
+    },
+    "pass_coverage": 0.44758909853249473,
+    "review_coverage": 0.008385744234800839,
+    "block_coverage": 0.5440251572327044,
+    "unsafe_auto_pass_rate": 0.010526315789473684,
+    "safe_auto_block_rate": 0.1022964509394572
+  },
+  "runtime_seconds": 73.63167214393616,
+  "environment": {
+    "device": "cuda",
+    "torch_version": "2.13.0+cu130",
+    "cuda_version": "13.0",
+    "cuda_device": "NVIDIA GeForce RTX 3060"
+  },
+  "data": {
+    "train_rows": 29305,
+    "dev_rows": 954,
+    "raw_text_in_logs": false
+  }
+}

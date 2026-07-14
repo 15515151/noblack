@@ -1,0 +1,6 @@
+.gocache/
+.gotmp/
+.runtime/
+model_service/src/**/__pycache__/
+*.py[cod]
+data/model-service.*.log

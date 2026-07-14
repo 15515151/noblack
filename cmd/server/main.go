@@ -25,20 +25,30 @@ import (
 
 	"noblack/internal/api"
 	"noblack/internal/matcher"
+	"noblack/internal/modelclient"
 	"noblack/internal/stats"
 	"noblack/internal/store"
 )
 
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
+}
+
 func main() {
 	var (
-		wordsPath = flag.String("words", "./words.json", "敏感词库文件路径 (JSON)")
-		addr      = flag.String("addr", ":8080", "HTTP 监听地址")
-		watch     = flag.Bool("watch", true, "是否启用 fsnotify 文件监听热加载")
-		caseIns   = flag.Bool("ci", false, "匹配是否大小写不敏感 (主要影响英文词, 如 Bilibili≈bilibili)")
-		defLevel  = flag.String("default-level", "Low", "词条未标注 level/levels 时使用的默认等级")
-		statsFile = flag.String("stats-file", "", "统计持久化文件路径 (JSON); 留空则不持久化, 重启后统计归零")
-		statsIvl  = flag.Duration("stats-flush-interval", 30*time.Second, "统计后台落盘间隔 (仅在 -stats-file 非空时生效)")
-		token     = flag.String("token", "", "词条写操作(新增/修改/删除)的鉴权令牌; 留空则不鉴权")
+		wordsPath    = flag.String("words", "./words.json", "敏感词库文件路径 (JSON)")
+		addr         = flag.String("addr", ":8080", "HTTP 监听地址")
+		watch        = flag.Bool("watch", true, "是否启用 fsnotify 文件监听热加载")
+		caseIns      = flag.Bool("ci", false, "匹配是否大小写不敏感 (主要影响英文词, 如 Bilibili≈bilibili)")
+		defLevel     = flag.String("default-level", "Low", "词条未标注 level/levels 时使用的默认等级")
+		statsFile    = flag.String("stats-file", "", "统计持久化文件路径 (JSON); 留空则不持久化, 重启后统计归零")
+		statsIvl     = flag.Duration("stats-flush-interval", 30*time.Second, "统计后台落盘间隔 (仅在 -stats-file 非空时生效)")
+		token        = flag.String("token", "", "词条写操作(新增/修改/删除)的鉴权令牌; 留空则不鉴权")
+		modelURL     = flag.String("model-service-url", envOr("NB_MODEL_SERVICE_URL", "http://127.0.0.1:8091"), "dual-model service URL; empty disables AI models")
+		modelTimeout = flag.Duration("model-timeout", 45*time.Second, "dual-model inference timeout")
 	)
 	flag.Parse()
 
@@ -91,7 +101,19 @@ func main() {
 
 	// 5. 注册路由 (含前端静态页与 API)。
 	mux := http.NewServeMux()
-	api.NewHandler(st, metrics, *token).Register(mux)
+	handler := api.NewHandler(st, metrics, *token)
+	if *modelURL != "" {
+		client := modelclient.New(*modelURL, *modelTimeout)
+		handler.SetModelClient(client)
+		healthCtx, healthCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := client.Health(healthCtx); err != nil {
+			log.Printf("[models] service not ready at startup; /check will degrade gracefully: %v", err)
+		} else {
+			log.Printf("[models] dual CPU model service ready: %s", *modelURL)
+		}
+		healthCancel()
+	}
+	handler.Register(mux)
 	if *token != "" {
 		log.Printf("已启用词条写操作鉴权 (新增/修改/删除需令牌)")
 	}
@@ -100,7 +122,7 @@ func main() {
 		Addr:         *addr,
 		Handler:      mux,
 		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 

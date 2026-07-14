@@ -35,6 +35,16 @@ const indexHTML = `<!DOCTYPE html>
   .tag.remark { color:#fbbf24; }
   .hl { background:#7c2d12; color:#fed7aa; border-radius:3px; padding:0 2px; }
   .stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .model-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin:14px 0; }
+  .model-card { background:#0f172a; border:1px solid #334155; border-radius:12px; padding:16px; }
+  .model-card h4 { margin:0 0 10px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .model-score { font-size:28px; font-weight:700; color:#38bdf8; margin:8px 0; }
+  .action { display:inline-block; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:700; }
+  .action-pass { color:#bef264; background:#365314; }
+  .action-review { color:#fde68a; background:#78350f; }
+  .action-block { color:#fecaca; background:#7f1d1d; }
+  .model-meta { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 12px; font-size:12px; color:#94a3b8; }
+  @media(max-width:720px){ .model-grid{grid-template-columns:1fr;} }
   .stat-box { background:#0f172a; border:1px solid #334155; border-radius:10px; padding:16px; text-align:center; }
   .stat-box .num { font-size:28px; font-weight:700; color:#38bdf8; }
   .stat-box .lbl { font-size:12px; color:#94a3b8; margin-top:4px; }
@@ -166,20 +176,45 @@ async function doCheck(){
     renderCheck(text, d);
   }catch(e){ toast(e.message,true); }
 }
+function actionLabel(action){
+  return {pass:'\u901a\u8fc7',review:'\u4eba\u5de5\u590d\u6838',block:'\u62e6\u622a'}[action]||action;
+}
+function renderModelResults(d){
+  if(d.model_error) return '<div class="card" style="border-color:#ef4444"><b>AI \u6a21\u578b\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528</b><div class="muted">'+esc(d.model_error)+'</div></div>';
+  const models=d.model_results||[];
+  if(!models.length) return '<div class="card"><span class="muted">AI \u6a21\u578b\u672a\u542f\u7528\u3002</span></div>';
+  const cards=models.map(m=>{
+    const pct=(Number(m.sexual_harm_probability||0)*100).toFixed(2)+'%';
+    const gate=(Number(m.semantic_gate||0)*100).toFixed(1)+'%';
+    const name=m.model==='macbert'?'MacBERT':'Lite BiGRU';
+    const rules=(m.rule_hits||[]).length?'<div class="muted" style="margin-top:8px">Rule: '+esc(m.rule_hits.join(', '))+'</div>':'';
+    return '<div class="model-card"><h4><span>'+name+'</span><span class="action action-'+esc(m.action)+'">'+actionLabel(m.action)+'</span></h4>'+
+      '<div class="model-score">'+pct+'</div>'+
+      '<div class="model-meta"><span>\u8bed\u4e49\u95e8\u63a7 '+gate+'</span><span>\u8017\u65f6 '+Number(m.latency_ms||0).toFixed(1)+' ms</span>'+
+      '<span>Pass &lt; '+Number(m.pass_threshold||0).toFixed(2)+'</span><span>Block &ge; '+Number(m.block_threshold||0).toFixed(2)+'</span></div>'+rules+'</div>';
+  }).join('');
+  return '<div class="card"><div class="row" style="justify-content:space-between;margin-top:0"><h3 style="margin:0">AI \u53cc\u6a21\u578b\u7ed3\u679c</h3>'+
+    '<span class="muted">'+esc(d.model_device||'cpu')+' ? '+(d.models_parallel?'\u5e76\u884c':'\u4e32\u884c')+' ? '+Number(d.model_latency_ms||0).toFixed(1)+' ms</span></div>'+
+    '<div class="model-grid">'+cards+'</div><div class="muted">\u7efc\u5408\u5efa\u8bae: <span class="action action-'+esc(d.combined_action)+'">'+actionLabel(d.combined_action)+'</span></div></div>';
+}
 function renderCheck(text, d){
   const box = $('#check-result');
-  if(!d.has_sensitive_word){ box.innerHTML='<p class="muted">✅ 未检测到敏感词。</p>'; return; }
-  // 高亮命中 (按 rune)
-  const chars=[...text]; const mark=new Array(chars.length).fill(false);
-  d.matches.forEach(m=>{ for(let i=m.position.start;i<m.position.end;i++) mark[i]=true; });
-  let html=''; chars.forEach((c,i)=>{ html+= mark[i]?'<span class="hl">'+esc(c)+'</span>':esc(c); });
-  let rows = d.matches.map(m=>'<tr><td><b>'+esc(m.word)+'</b></td><td>'+
-    m.levels.map(l=>'<span class="tag '+lvlClass(l)+'">'+esc(l)+'</span>').join('')+'</td><td>'+
-    (m.remarks.length?m.remarks.map(r=>'<span class="tag remark">'+esc(r)+'</span>').join(''):'<span class="muted">—</span>')+
-    '</td><td class="muted">['+m.position.start+','+m.position.end+')</td></tr>').join('');
-  box.innerHTML='<div class="card" style="background:#0f172a"><div style="line-height:1.9;margin-bottom:12px">'+html+'</div>'+
-    '<table><thead><tr><th>命中词</th><th>等级</th><th>备注</th><th>位置</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
-  $('#check-hint').textContent='命中 '+d.matches.length+' 处';
+  const modelHTML=renderModelResults(d);
+  let keywordHTML='';
+  if(!d.has_sensitive_word){
+    keywordHTML='<div class="card" style="background:#0f172a"><p class="muted">\u2705 \u8bcd\u5e93\u672a\u68c0\u6d4b\u5230\u654f\u611f\u8bcd\u3002</p></div>';
+  }else{
+    const chars=[...text]; const mark=new Array(chars.length).fill(false);
+    d.matches.forEach(m=>{ for(let i=m.position.start;i<m.position.end;i++) mark[i]=true; });
+    let highlighted=''; chars.forEach((c,i)=>{ highlighted+= mark[i]?'<span class="hl">'+esc(c)+'</span>':esc(c); });
+    const rows=d.matches.map(m=>'<tr><td><b>'+esc(m.word)+'</b></td><td>'+m.levels.map(l=>'<span class="tag '+lvlClass(l)+'">'+esc(l)+'</span>').join('')+'</td><td>'+
+      (m.remarks.length?m.remarks.map(r=>'<span class="tag remark">'+esc(r)+'</span>').join(''):'<span class="muted">\u2014</span>')+'</td><td class="muted">['+m.position.start+','+m.position.end+')</td></tr>').join('');
+    keywordHTML='<div class="card" style="background:#0f172a"><h3>\u8bcd\u5e93\u547d\u4e2d</h3><div style="line-height:1.9;margin-bottom:12px">'+highlighted+'</div>'+
+      '<table><thead><tr><th>\u547d\u4e2d\u8bcd</th><th>\u7b49\u7ea7</th><th>\u5907\u6ce8</th><th>\u4f4d\u7f6e</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  }
+  box.innerHTML=modelHTML+keywordHTML;
+  const modelCount=(d.model_results||[]).length;
+  $('#check-hint').textContent='AI '+modelCount+' \u4e2a\u6a21\u578b ? \u8bcd\u5e93\u547d\u4e2d '+(d.matches||[]).length+' \u5904';
 }
 
 // ---- 词库 ----
