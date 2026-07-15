@@ -20,6 +20,8 @@ def make_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--encoder-type", choices=("lite", "pretrained"), default="lite")
     train_parser.add_argument("--model-name", default="hfl/chinese-macbert-base")
     train_parser.add_argument("--include-augmented", action=argparse.BooleanOptionalAction, default=True)
+    train_parser.add_argument("--production-data-dir", type=Path)
+    train_parser.add_argument("--production-negative-repeat", type=int, default=1)
     train_parser.add_argument("--max-length", type=int, default=128)
     train_parser.add_argument("--batch-size", type=int, default=32)
     train_parser.add_argument("--epochs", type=int, default=3)
@@ -69,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
             encoder_type=args.encoder_type,
             model_name=args.model_name,
             include_augmented=args.include_augmented,
+            production_data_dir=str(args.production_data_dir.resolve()) if args.production_data_dir else None,
+            production_negative_repeat=args.production_negative_repeat,
             max_length=args.max_length,
             batch_size=args.batch_size,
             epochs=args.epochs,

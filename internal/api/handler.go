@@ -173,14 +173,15 @@ type matchItem struct {
 }
 
 type checkData struct {
-	HasSensitiveWord bool                      `json:"has_sensitive_word"`
-	Matches          []matchItem               `json:"matches"`
-	ModelResults     []modelclient.ModelResult `json:"model_results,omitempty"`
-	CombinedAction   string                    `json:"combined_action,omitempty"`
-	ModelDevice      string                    `json:"model_device,omitempty"`
-	ModelsParallel   bool                      `json:"models_parallel,omitempty"`
-	ModelLatencyMS   float64                   `json:"model_latency_ms,omitempty"`
-	ModelError       string                    `json:"model_error,omitempty"`
+	HasSensitiveWord   bool                      `json:"has_sensitive_word"`
+	Matches            []matchItem               `json:"matches"`
+	ModelResults       []modelclient.ModelResult `json:"model_results,omitempty"`
+	CombinedAction     string                    `json:"combined_action,omitempty"`
+	ModelCombinePolicy string                    `json:"model_combine_policy,omitempty"`
+	ModelDevice        string                    `json:"model_device,omitempty"`
+	ModelsParallel     bool                      `json:"models_parallel,omitempty"`
+	ModelLatencyMS     float64                   `json:"model_latency_ms,omitempty"`
+	ModelError         string                    `json:"model_error,omitempty"`
 }
 
 func (h *Handler) handleCheck(w http.ResponseWriter, r *http.Request) {
@@ -249,6 +250,7 @@ func (h *Handler) handleCheck(w http.ResponseWriter, r *http.Request) {
 		} else {
 			data.ModelResults = outcome.prediction.Models
 			data.CombinedAction = outcome.prediction.CombinedAction
+			data.ModelCombinePolicy = outcome.prediction.CombinePolicy
 			data.ModelDevice = outcome.prediction.Device
 			data.ModelsParallel = outcome.prediction.Parallel
 			data.ModelLatencyMS = outcome.prediction.LatencyMilliseconds

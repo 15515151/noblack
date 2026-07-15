@@ -24,6 +24,10 @@ if str(SRC) not in sys.path:
 
 import torch  # noqa: E402
 from noblack_model.inference import SafetyPredictor  # noqa: E402
+from noblack_model.policy import (  # noqa: E402
+    SUPPORTED_COMBINE_POLICIES,
+    combine_model_actions,
+)
 
 
 def env_float(name: str, default: float) -> float:
@@ -41,20 +45,30 @@ except RuntimeError:
 
 PASS_THRESHOLD = env_float("NB_MODEL_PASS_THRESHOLD", 0.15)
 BLOCK_THRESHOLD = env_float("NB_MODEL_BLOCK_THRESHOLD", 0.5)
+COMBINE_POLICY = os.getenv("NB_MODEL_COMBINE_POLICY", "max").strip().lower()
+if COMBINE_POLICY not in SUPPORTED_COMBINE_POLICIES:
+    allowed = ", ".join(sorted(SUPPORTED_COMBINE_POLICIES))
+    raise ValueError(f"NB_MODEL_COMBINE_POLICY must be one of: {allowed}")
 MAX_TEXT_CHARS = int(os.getenv("NB_MODEL_MAX_TEXT_CHARS", "20000"))
 
 MODEL_PATHS = {
-    "lite": Path(os.getenv("NB_LITE_MODEL", str(ROOT / "models" / "lite-baseline"))),
-    "macbert": Path(os.getenv("NB_MACBERT_MODEL", str(ROOT / "models" / "macbert-pilot"))),
+    "lite": Path(os.getenv("NB_LITE_MODEL", str(ROOT / "models" / "lite-production-v1"))),
+    "macbert": Path(os.getenv("NB_MACBERT_MODEL", str(ROOT / "models" / "macbert-production-v1"))),
+}
+MODEL_THRESHOLDS = {
+    "lite": (
+        env_float("NB_LITE_PASS_THRESHOLD", PASS_THRESHOLD),
+        env_float("NB_LITE_BLOCK_THRESHOLD", BLOCK_THRESHOLD),
+    ),
+    "macbert": (
+        env_float("NB_MACBERT_PASS_THRESHOLD", PASS_THRESHOLD),
+        env_float("NB_MACBERT_BLOCK_THRESHOLD", BLOCK_THRESHOLD),
+    ),
 }
 
 
 def text_ref(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()[:12]
-
-
-def action_rank(action: str) -> int:
-    return {"pass": 0, "review": 1, "block": 2}.get(action, 1)
 
 
 class ModelRuntime:
@@ -65,10 +79,11 @@ class ModelRuntime:
         for name, path in MODEL_PATHS.items():
             if not path.exists():
                 raise FileNotFoundError(f"model directory not found: {path}")
+            pass_threshold, block_threshold = MODEL_THRESHOLDS[name]
             self.predictors[name] = SafetyPredictor(
                 path,
-                pass_threshold=PASS_THRESHOLD,
-                block_threshold=BLOCK_THRESHOLD,
+                pass_threshold=pass_threshold,
+                block_threshold=block_threshold,
             )
             print(f"[model-service] loaded model={name} path={path}", flush=True)
         # Warm models sequentially. CPU BLAS/OpenMP libraries may initialize
@@ -81,7 +96,8 @@ class ModelRuntime:
         self.load_seconds = time.perf_counter() - load_started
         print(
             f"[model-service] ready models={','.join(self.predictors)} "
-            f"device=cpu torch_threads={TORCH_THREADS} load_seconds={self.load_seconds:.3f}",
+            f"device=cpu torch_threads={TORCH_THREADS} combine_policy={COMBINE_POLICY} "
+            f"load_seconds={self.load_seconds:.3f}",
             flush=True,
         )
 
@@ -100,13 +116,14 @@ class ModelRuntime:
             for name, predictor in self.predictors.items()
         }
         results = [futures[name].result() for name in ("lite", "macbert")]
-        combined = max((result["action"] for result in results), key=action_rank)
+        combined = combine_model_actions(results, policy=COMBINE_POLICY)
         return {
             "request_id": text_ref(text),
             "device": "cpu",
             "parallel": True,
             "models": results,
             "combined_action": combined,
+            "combine_policy": COMBINE_POLICY,
             "latency_ms": round((time.perf_counter() - request_started) * 1000, 2),
         }
 
@@ -136,6 +153,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 "device": "cpu",
                 "models": list(RUNTIME.predictors),
                 "parallel": True,
+                "combine_policy": COMBINE_POLICY,
                 "torch_threads": TORCH_THREADS,
                 "load_seconds": round(RUNTIME.load_seconds, 3),
             },
@@ -174,7 +192,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
         print(
             f"[model-service] predicted request_id={result['request_id']} "
-            f"combined={result['combined_action']} latency_ms={(time.perf_counter()-started)*1000:.2f}",
+            f"combined={result['combined_action']} policy={result['combine_policy']} "
+            f"latency_ms={(time.perf_counter()-started)*1000:.2f}",
             flush=True,
         )
         self._json(200, {"ok": True, **result})
@@ -194,6 +213,7 @@ def main() -> None:
             "ok": True,
             "device": result["device"],
             "parallel": result["parallel"],
+            "combine_policy": result["combine_policy"],
             "models": [item["model"] for item in result["models"]],
             "latency_ms": result["latency_ms"],
         }, ensure_ascii=False), flush=True)

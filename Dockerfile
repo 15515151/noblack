@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+﻿# syntax=docker/dockerfile:1
 
 # ============ Go build stage ============
 FROM golang:1.25.12-alpine AS go-build
@@ -52,7 +52,8 @@ ENV NB_ADDR=":8080" \
     NB_MODEL_SERVICE_URL="http://127.0.0.1:8091" \
     NB_MODEL_THREADS="2" \
     NB_MODEL_PASS_THRESHOLD="0.15" \
-    NB_MODEL_BLOCK_THRESHOLD="0.5"
+    NB_MODEL_BLOCK_THRESHOLD="0.5" \
+    NB_MODEL_COMBINE_POLICY="max"
 
 USER root
 EXPOSE 8080
@@ -62,3 +63,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=5 \
     CMD curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
+

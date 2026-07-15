@@ -257,7 +257,7 @@ func TestMissingWordStillReturns404(t *testing.T) {
 func TestCheckIncludesBothModelResults(t *testing.T) {
 	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ok":true,"request_id":"abc","device":"cpu","parallel":true,"combined_action":"block","latency_ms":12.5,"models":[{"model":"lite","id":"1","sexual_harm_probability":0.2,"action":"review","semantic_gate":0.5,"rule_hits":[],"pass_threshold":0.15,"block_threshold":0.5,"latency_ms":2},{"model":"macbert","id":"1","sexual_harm_probability":0.8,"action":"block","semantic_gate":0.6,"rule_hits":[],"pass_threshold":0.15,"block_threshold":0.5,"latency_ms":10}]}`))
+		_, _ = w.Write([]byte(`{"ok":true,"request_id":"abc","device":"cpu","parallel":true,"combined_action":"review","combine_policy":"consensus","latency_ms":12.5,"models":[{"model":"lite","id":"1","sexual_harm_probability":0.2,"action":"review","semantic_gate":0.5,"rule_hits":[],"pass_threshold":0.15,"block_threshold":0.5,"latency_ms":2},{"model":"macbert","id":"1","sexual_harm_probability":0.8,"action":"block","semantic_gate":0.6,"rule_hits":[],"pass_threshold":0.15,"block_threshold":0.5,"latency_ms":10}]}`))
 	}))
 	defer modelServer.Close()
 
@@ -268,7 +268,7 @@ func TestCheckIncludesBothModelResults(t *testing.T) {
 		t.Fatalf("/check status=%d body=%s", rec.Code, rec.Body)
 	}
 	body := rec.Body.String()
-	for _, expected := range []string{`"model_results"`, `"model":"lite"`, `"model":"macbert"`, `"model_device":"cpu"`, `"models_parallel":true`} {
+	for _, expected := range []string{`"model_results"`, `"model":"lite"`, `"model":"macbert"`, `"model_device":"cpu"`, `"models_parallel":true`, `"model_combine_policy":"consensus"`} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("missing %s in %s", expected, body)
 		}

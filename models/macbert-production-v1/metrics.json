@@ -1,0 +1,93 @@
+{
+  "best_epoch": 1,
+  "best_f1_at_0_5": 0.9777306468716861,
+  "history": [
+    {
+      "epoch": 1,
+      "losses": {
+        "classification": 0.08938543300830666,
+        "auxiliary": 0.2582993968540477,
+        "consistency": 0.030422181086319795,
+        "representation": 0.21357946170944567,
+        "total": 0.14265775555535037
+      },
+      "dev": {
+        "tp": 461,
+        "fp": 7,
+        "tn": 762,
+        "fn": 14,
+        "threshold": 0.5,
+        "accuracy": 0.9831189710610932,
+        "precision": 0.9850427350427351,
+        "recall": 0.9705263157894737,
+        "specificity": 0.9908972691807543,
+        "f1": 0.9777306468716861,
+        "balanced_accuracy": 0.980711792485114,
+        "average_precision": 0.9977796210458203,
+        "mean_semantic_gate": 0.5603685348363552
+      },
+      "learning_rates": [
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "calibrated_dev_metrics": {
+    "tp": 465,
+    "fp": 9,
+    "tn": 760,
+    "fn": 10,
+    "threshold": 0.35,
+    "accuracy": 0.9847266881028939,
+    "precision": 0.9810126582278481,
+    "recall": 0.9789473684210527,
+    "specificity": 0.988296488946684,
+    "f1": 0.9799789251844047,
+    "balanced_accuracy": 0.9836219286838683,
+    "average_precision": 0.9977796210458203,
+    "mean_semantic_gate": 0.5603685348363552
+  },
+  "threshold_policy": {
+    "pass_threshold": 0.248535,
+    "block_threshold": 0.35,
+    "target_block_precision": 0.98,
+    "target_pass_recall": 0.98
+  },
+  "policy_metrics": {
+    "actions": {
+      "pass": 767,
+      "review": 3,
+      "block": 474
+    },
+    "unsafe_actions": {
+      "pass": 9,
+      "review": 1,
+      "block": 465
+    },
+    "safe_actions": {
+      "pass": 758,
+      "review": 2,
+      "block": 9
+    },
+    "pass_coverage": 0.6165594855305466,
+    "review_coverage": 0.002411575562700965,
+    "block_coverage": 0.38102893890675243,
+    "unsafe_auto_pass_rate": 0.018947368421052633,
+    "safe_auto_block_rate": 0.011703511053315995
+  },
+  "runtime_seconds": 117.27273154258728,
+  "environment": {
+    "device": "cuda",
+    "torch_version": "2.13.0+cu130",
+    "cuda_version": "13.0",
+    "cuda_device": "NVIDIA GeForce RTX 3060"
+  },
+  "data": {
+    "train_rows": 7170,
+    "dev_rows": 1244,
+    "production_train_unique_rows": 1537,
+    "production_train_effective_rows": 3074,
+    "production_dev_rows": 290,
+    "raw_text_in_logs": false
+  }
+}

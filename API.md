@@ -1,4 +1,4 @@
-# noblack 敏感词检测服务 · API 文档
+﻿# noblack 敏感词检测服务 · API 文档
 
 > 版本：v1 · 基准地址（示例）：`http://localhost:8080`
 > 所有响应均为 `Content-Type: application/json; charset=utf-8`。
@@ -666,7 +666,8 @@ curl http://localhost:8080/health
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `data.model_results` | array | 两个模型的独立结果。正常情况下依次包含 `lite` 和 `macbert`。 |
-| `data.combined_action` | string | 综合建议，取两个模型中更严格的动作：`block > review > pass`。 |
+| `data.combined_action` | string | 综合建议，取决于 `model_combine_policy`。生产微调模型默认 `max`，即取两个模型中更严格的动作。 |
+| `data.model_combine_policy` | string | 当前合并策略，默认 `max`；可配置为低误报优先的 `consensus`。 |
 | `data.model_device` | string | 模型运行设备；当前纯 CPU 部署固定为 `cpu`。 |
 | `data.models_parallel` | bool | 两个模型是否并行推理；正常部署时为 `true`。 |
 | `data.model_latency_ms` | number | 两个模型并行推理的总耗时，单位为毫秒。 |
@@ -698,6 +699,7 @@ curl http://localhost:8080/health
     "model_device": "cpu",
     "models_parallel": true,
     "combined_action": "block",
+    "model_combine_policy": "max",
     "model_latency_ms": 18.42,
     "model_results": [
       {

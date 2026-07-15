@@ -29,6 +29,8 @@ class TrainConfig:
     encoder_type: str = "lite"
     model_name: str = "hfl/chinese-macbert-base"
     include_augmented: bool = True
+    production_data_dir: str | None = None
+    production_negative_repeat: int = 1
     max_length: int = 128
     batch_size: int = 32
     epochs: int = 3
@@ -156,6 +158,16 @@ def train(config: TrainConfig) -> dict[str, Any]:
 
     train_records = load_training_records(processed_dir, config.include_augmented, config.limit_train)
     dev_records = load_jsonl(processed_dir / "sexharmset" / "dev.jsonl", config.limit_dev)
+    production_train_records: list[dict[str, Any]] = []
+    production_dev_records: list[dict[str, Any]] = []
+    if config.production_data_dir:
+        if config.production_negative_repeat < 1:
+            raise ValueError("production_negative_repeat must be at least 1")
+        production_dir = Path(config.production_data_dir).resolve()
+        production_train_records = load_jsonl(production_dir / "train.jsonl")
+        production_dev_records = load_jsonl(production_dir / "dev.jsonl")
+        train_records = train_records + production_train_records * config.production_negative_repeat
+        dev_records = dev_records + production_dev_records
     if not train_records or not dev_records:
         raise RuntimeError("Training and development data must not be empty")
 
@@ -331,6 +343,9 @@ def train(config: TrainConfig) -> dict[str, Any]:
         "data": {
             "train_rows": len(train_records),
             "dev_rows": len(dev_records),
+            "production_train_unique_rows": len(production_train_records),
+            "production_train_effective_rows": len(production_train_records) * config.production_negative_repeat,
+            "production_dev_rows": len(production_dev_records),
             "raw_text_in_logs": False,
         },
     }

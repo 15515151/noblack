@@ -1,4 +1,4 @@
-services:
+﻿services:
   noblack:
     build: .
     container_name: noblack
@@ -19,5 +19,8 @@ services:
       NB_MODEL_THREADS: "2"
       NB_MODEL_PASS_THRESHOLD: "0.15"
       NB_MODEL_BLOCK_THRESHOLD: "0.5"
+      # Production-tuned models use max to preserve either model's risk signal.
+      NB_MODEL_COMBINE_POLICY: "max"
     # MacBERT + Lite typically need roughly 1-2 GB RAM at runtime.
     restart: unless-stopped
+

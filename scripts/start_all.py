@@ -113,8 +113,9 @@ def main() -> int:
     env["NB_MODEL_HOST"] = "127.0.0.1"
     env["NB_MODEL_PORT"] = str(args.model_port)
     env["NB_MODEL_THREADS"] = str(args.threads)
-    env["NB_LITE_MODEL"] = str(ROOT / "models" / "lite-baseline")
-    env["NB_MACBERT_MODEL"] = str(ROOT / "models" / "macbert-pilot")
+    env.setdefault("NB_LITE_MODEL", str(ROOT / "models" / "lite-production-v1"))
+    env.setdefault("NB_MACBERT_MODEL", str(ROOT / "models" / "macbert-production-v1"))
+    env.setdefault("NB_MODEL_COMBINE_POLICY", "max")
     model_url = f"http://127.0.0.1:{args.model_port}"
 
     model_process: subprocess.Popen | None = None
@@ -165,7 +166,12 @@ def main() -> int:
             )
             data = response.get("data", {})
             models = data.get("model_results", [])
-            if len(models) != 2 or data.get("model_device") != "cpu" or not data.get("models_parallel"):
+            if (
+                len(models) != 2
+                or data.get("model_device") != "cpu"
+                or not data.get("models_parallel")
+                or not data.get("model_combine_policy")
+            ):
                 raise RuntimeError(f"incomplete dual-model response: {response}")
             print(
                 json.dumps(
@@ -173,6 +179,7 @@ def main() -> int:
                         "ok": True,
                         "device": data["model_device"],
                         "parallel": data["models_parallel"],
+                        "combine_policy": data.get("model_combine_policy"),
                         "models": [item["model"] for item in models],
                         "actions": {item["model"]: item["action"] for item in models},
                         "model_latency_ms": data.get("model_latency_ms"),

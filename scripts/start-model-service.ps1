@@ -18,7 +18,9 @@ $env:TOKENIZERS_PARALLELISM = "false"
 $env:NB_MODEL_HOST = "127.0.0.1"
 $env:NB_MODEL_PORT = "$Port"
 $env:NB_MODEL_THREADS = "$Threads"
-$env:NB_LITE_MODEL = Join-Path $root "models\lite-baseline"
-$env:NB_MACBERT_MODEL = Join-Path $root "models\macbert-pilot"
+$env:NB_LITE_MODEL = Join-Path $root "models\lite-production-v1"
+$env:NB_MACBERT_MODEL = Join-Path $root "models\macbert-production-v1"
+if ([string]::IsNullOrWhiteSpace($env:NB_MODEL_COMBINE_POLICY)) { $env:NB_MODEL_COMBINE_POLICY = "max" }
 
 & $python (Join-Path $root "model_service\app.py")
+

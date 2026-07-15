@@ -1,4 +1,4 @@
-# noblack
+﻿# noblack
 
 一个使用 Go 编写的轻量级文本关键词匹配服务。项目基于 Aho-Corasick 自动机，提供关键词扫描、分类标签、备注信息、在线词库管理、运行统计与热更新能力，并内置了可直接使用的 Web 控制台。
 
@@ -264,6 +264,8 @@ go test -bench=. ./internal/matcher/
 ## AI 双模型（纯 CPU）
 
 项目已内置 Lite 与 MacBERT 两个模型。部署时两个模型同时常驻内存，每次检测并行执行，并在 Web 页面同时显示结果。
+
+生产微调模型默认采用 `max` 策略以保留任一模型发现的色情/谐音风险；如需进一步压低误报，可设置 `NB_MODEL_COMBINE_POLICY=consensus`，要求两个模型共同升级。
 
 ```powershell
 # Windows

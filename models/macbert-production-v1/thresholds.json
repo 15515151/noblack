@@ -1,0 +1,6 @@
+{
+  "pass_threshold": 0.248535,
+  "block_threshold": 0.35,
+  "target_block_precision": 0.98,
+  "target_pass_recall": 0.98
+}

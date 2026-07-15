@@ -2,8 +2,8 @@
 
 本项目现在把两个模型直接放在仓库中：
 
-- `models/lite-baseline`：轻量字符 + 拼音双分支模型
-- `models/macbert-pilot`：MacBERT + 拼音双分支模型
+- `models/lite-production-v1`：轻量字符 + 拼音双分支模型
+- `models/macbert-production-v1`：MacBERT + 拼音双分支模型
 
 部署时两个模型会：
 
@@ -72,8 +72,11 @@ docker compose up -d --build
 | 环境变量 | 默认值 | 说明 |
 |---|---|---|
 | `NB_MODEL_THREADS` | `2` | PyTorch CPU 线程数 |
-| `NB_MODEL_PASS_THRESHOLD` | `0.15` | 低于此概率自动通过 |
-| `NB_MODEL_BLOCK_THRESHOLD` | `0.5` | 高于等于此概率自动拦截 |
+| `NB_MODEL_PASS_THRESHOLD` | `0.15` | 两个模型共用的默认通过阈值 |
+| `NB_MODEL_BLOCK_THRESHOLD` | `0.5` | 两个模型共用的默认拦截阈值 |
+| `NB_LITE_PASS_THRESHOLD` / `NB_LITE_BLOCK_THRESHOLD` | 继承共用阈值 | 单独调整 Lite 阈值 |
+| `NB_MACBERT_PASS_THRESHOLD` / `NB_MACBERT_BLOCK_THRESHOLD` | 继承共用阈值 | 单独调整 MacBERT 阈值 |
+| `NB_MODEL_COMBINE_POLICY` | `max` | `max` 保留任一模型风险；`consensus` 要求两个模型共同升级，误报更低 |
 | `NB_MODEL_SERVICE_URL` | `http://127.0.0.1:8091` | Go 调用的本地模型服务 |
 | `NB_MODEL_MAX_TEXT_CHARS` | `20000` | AI 模型单次文本字符上限 |
 
@@ -95,7 +98,8 @@ CPU 核数较多时可以调整：
   "matches": [],
   "model_device": "cpu",
   "models_parallel": true,
-  "combined_action": "review",
+  "combined_action": "block",
+  "model_combine_policy": "max",
   "model_latency_ms": 28.5,
   "model_results": [
     {
@@ -112,7 +116,7 @@ CPU 核数较多时可以调整：
 }
 ```
 
-`combined_action` 默认取两个模型中更严格的动作：`block > review > pass`。前端会保留两个独立结果，不会只展示合并结论。
+`combined_action` 默认使用 `max` 策略，保留 Lite 或 MacBERT 任一模型识别出的色情/谐音风险。若生产环境仍希望进一步降低误报，可设置 `NB_MODEL_COMBINE_POLICY=consensus`，此时两个模型都给出非 `pass` 才进入 `review`，两个模型都给出 `block` 才自动拦截。前端始终保留两个独立结果。
 
 ## 模型服务不可用时
 

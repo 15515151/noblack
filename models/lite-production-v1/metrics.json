@@ -1,0 +1,148 @@
+{
+  "best_epoch": 2,
+  "best_f1_at_0_5": 0.9607635206786851,
+  "history": [
+    {
+      "epoch": 1,
+      "losses": {
+        "classification": 0.17006745023041847,
+        "auxiliary": 0.27207277919876244,
+        "consistency": 0.02144549118185585,
+        "representation": 0.23308102032648245,
+        "total": 0.22487192969077188
+      },
+      "dev": {
+        "tp": 457,
+        "fp": 22,
+        "tn": 747,
+        "fn": 18,
+        "threshold": 0.5,
+        "accuracy": 0.9678456591639871,
+        "precision": 0.954070981210856,
+        "recall": 0.9621052631578947,
+        "specificity": 0.9713914174252276,
+        "f1": 0.9580712788259957,
+        "balanced_accuracy": 0.9667483402915611,
+        "average_precision": 0.9887722220199753,
+        "mean_semantic_gate": 0.535403444835994
+      },
+      "learning_rates": [
+        0.0001500000000000001
+      ]
+    },
+    {
+      "epoch": 2,
+      "losses": {
+        "classification": 0.03070622010031354,
+        "auxiliary": 0.11238402773151285,
+        "consistency": 0.012285852650058061,
+        "representation": 0.22986026826818942,
+        "total": 0.0673878208509547
+      },
+      "dev": {
+        "tp": 453,
+        "fp": 15,
+        "tn": 754,
+        "fn": 22,
+        "threshold": 0.5,
+        "accuracy": 0.9702572347266881,
+        "precision": 0.967948717948718,
+        "recall": 0.9536842105263158,
+        "specificity": 0.9804941482444733,
+        "f1": 0.9607635206786851,
+        "balanced_accuracy": 0.9670891793853946,
+        "average_precision": 0.9902754924662649,
+        "mean_semantic_gate": 0.545397327643882
+      },
+      "learning_rates": [
+        4.9999999999999975e-05
+      ]
+    },
+    {
+      "epoch": 3,
+      "losses": {
+        "classification": 0.009284618310630322,
+        "auxiliary": 0.07892905446984198,
+        "consistency": 0.00547849675176298,
+        "representation": 0.2273673854856623,
+        "total": 0.04100996210228784
+      },
+      "dev": {
+        "tp": 454,
+        "fp": 19,
+        "tn": 750,
+        "fn": 21,
+        "threshold": 0.5,
+        "accuracy": 0.9678456591639871,
+        "precision": 0.959830866807611,
+        "recall": 0.9557894736842105,
+        "specificity": 0.9752925877763329,
+        "f1": 0.9578059071729957,
+        "balanced_accuracy": 0.9655410307302716,
+        "average_precision": 0.9903468025349216,
+        "mean_semantic_gate": 0.5485063841105274
+      },
+      "learning_rates": [
+        0.0
+      ]
+    }
+  ],
+  "calibrated_dev_metrics": {
+    "tp": 429,
+    "fp": 8,
+    "tn": 761,
+    "fn": 46,
+    "threshold": 0.914551,
+    "accuracy": 0.9565916398713826,
+    "precision": 0.9816933638443935,
+    "recall": 0.9031578947368422,
+    "specificity": 0.9895968790637191,
+    "f1": 0.9407894736842105,
+    "balanced_accuracy": 0.9463773869002806,
+    "average_precision": 0.9902754924662649,
+    "mean_semantic_gate": 0.545397327643882
+  },
+  "threshold_policy": {
+    "pass_threshold": 0.029678,
+    "block_threshold": 0.914551,
+    "target_block_precision": 0.98,
+    "target_pass_recall": 0.98
+  },
+  "policy_metrics": {
+    "actions": {
+      "pass": 707,
+      "review": 100,
+      "block": 437
+    },
+    "unsafe_actions": {
+      "pass": 9,
+      "review": 37,
+      "block": 429
+    },
+    "safe_actions": {
+      "pass": 698,
+      "review": 63,
+      "block": 8
+    },
+    "pass_coverage": 0.5683279742765274,
+    "review_coverage": 0.08038585209003216,
+    "block_coverage": 0.3512861736334405,
+    "unsafe_auto_pass_rate": 0.018947368421052633,
+    "safe_auto_block_rate": 0.010403120936280884
+  },
+  "runtime_seconds": 112.10688376426697,
+  "environment": {
+    "device": "cuda",
+    "torch_version": "2.13.0+cu130",
+    "cuda_version": "13.0",
+    "cuda_device": "NVIDIA GeForce RTX 3060"
+  },
+  "data": {
+    "train_rows": 32379,
+    "dev_rows": 1244,
+    "production_train_unique_rows": 1537,
+    "production_train_effective_rows": 3074,
+    "production_dev_rows": 290,
+    "raw_text_in_logs": false
+  }
+}

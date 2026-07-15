@@ -18,3 +18,7 @@ API.md
 # 测试临时文件
 *.tmp
 *.test
+
+# Legacy checkpoints are kept locally for rollback but excluded from production images.
+models/lite-baseline
+models/macbert-pilot

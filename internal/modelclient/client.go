@@ -32,14 +32,16 @@ type Prediction struct {
 	Parallel            bool          `json:"parallel"`
 	Models              []ModelResult `json:"models"`
 	CombinedAction      string        `json:"combined_action"`
+	CombinePolicy       string        `json:"combine_policy"`
 	LatencyMilliseconds float64       `json:"latency_ms"`
 }
 
 type healthResponse struct {
-	OK       bool     `json:"ok"`
-	Device   string   `json:"device"`
-	Models   []string `json:"models"`
-	Parallel bool     `json:"parallel"`
+	OK            bool     `json:"ok"`
+	Device        string   `json:"device"`
+	Models        []string `json:"models"`
+	Parallel      bool     `json:"parallel"`
+	CombinePolicy string   `json:"combine_policy"`
 }
 
 // Client communicates only with the loopback model service. It never logs text.
